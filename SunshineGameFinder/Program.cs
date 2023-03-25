@@ -2,18 +2,27 @@
 using Newtonsoft.Json;
 using SunshineGameFinder;
 
-Console.WriteLine("Hello, World!");
 var gameDirs = new string[] { @"C:\Program Files (x86)\Steam\steamapps\common", @"C:\XboxGames", @"C:\Program Files\EA Games" };
 var exclusionWords = new string[] { "Steam" };
 var exeExclusionWords = new string[] { "Steam" };
 var sunshineAppsJson = @"C:\Program Files\Sunshine\config\apps.json";
+if (!File.Exists(sunshineAppsJson))
+{
+    Console.WriteLine($"Could not find Sunshine Apps config at specified path: {sunshineAppsJson}");
+    return;
+}
 var sunshineAppInstance = Newtonsoft.Json.JsonConvert.DeserializeObject<SunshineConfig>(File.ReadAllText(sunshineAppsJson));
 foreach (var platformDir in gameDirs)
 {
+    Console.WriteLine($"Scanning for games in {platformDir}...");
     foreach (var gameDir in Directory.GetDirectories(platformDir))
     {
+        Console.WriteLine($"Looking for game exe in {gameDir}...");
         var gameName = new DirectoryInfo(gameDir).Name;
-        if (exclusionWords.Any(ew => gameName.Contains(ew))) continue;
+        if (exclusionWords.Any(ew => gameName.Contains(ew)))
+        {
+            Console.WriteLine($"Skipping {gameName} as it was an excluded word match...");
+        }
         var exe = Directory.GetFiles(gameDir, "*.exe", SearchOption.AllDirectories).FirstOrDefault(exefile => !exeExclusionWords.Any(ew => new FileInfo(exefile).Name.Contains(ew)));
         if (string.IsNullOrEmpty(exe)) {
             Console.WriteLine($"EXE could not be found for game '${gameName}'");
