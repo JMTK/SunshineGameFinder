@@ -22,6 +22,7 @@ foreach (var platformDir in gameDirs)
         if (exclusionWords.Any(ew => gameName.Contains(ew)))
         {
             Console.WriteLine($"Skipping {gameName} as it was an excluded word match...");
+            continue;
         }
         var exe = Directory.GetFiles(gameDir, "*.exe", SearchOption.AllDirectories).FirstOrDefault(exefile => !exeExclusionWords.Any(ew => new FileInfo(exefile).Name.Contains(ew)));
         if (string.IsNullOrEmpty(exe)) {
@@ -32,11 +33,28 @@ foreach (var platformDir in gameDirs)
         var existingApp = sunshineAppInstance.apps.FirstOrDefault(g => g.cmd == exe || g.name == gameName);
         if (existingApp == null)
         {
-            existingApp = new SunshineApp()
+            if (exe.Contains("gamelaunchhelper.exe"))
             {
-                name = gameName,
-                cmd = exe
-            };
+                //xbox game pass game
+                existingApp = new SunshineApp()
+                {
+                    name = gameName,
+                    detached = new List<string>()
+                    {
+                        exe
+                    },
+                    workingdir = ""
+                };
+            }
+            else
+            {
+                existingApp = new SunshineApp()
+                {
+                    name = gameName,
+                    cmd = exe,
+                    workingdir = ""
+                };
+            }
             Console.WriteLine($"Adding new game to Sunshine apps: {gameName} - {exe}");
             sunshineAppInstance.apps.Add(existingApp);
         }
@@ -47,4 +65,4 @@ foreach (var platformDir in gameDirs)
     }
 }
 Console.WriteLine("Complete!");
-File.WriteAllText(sunshineAppsJson, JsonConvert.SerializeObject(sunshineAppInstance, Newtonsoft.Json.Formatting.Indented));
+File.WriteAllText(sunshineAppsJson, JsonConvert.SerializeObject(sunshineAppInstance, Newtonsoft.Json.Formatting.Indented, new JsonSerializerSettings() { NullValueHandling = NullValueHandling.Ignore }));
