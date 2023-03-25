@@ -1,0 +1,1 @@
+﻿Thanks for wanting to help out or improve this scanning tool. Just fork, make your change, and make a PR back to the `main` branch
