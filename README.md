@@ -1,6 +1,9 @@
 # Sunshine Game Finder
 Searches your computer for various common game install paths for the [Sunshine](https://github.com/LizardByte/Sunshine) application. After running it, all games that did not already exist will be added to the `apps.json`, meaning your [Moonlight client](https://github.com/moonlight-stream/moonlight-qt) should see them next time it is started.
 
+# Running the program from release
+Download the [latest release](https://github.com/JMTK/SunshineGameFinder/releases). You may need to run the program as administrator depending on the permissions of the user executing it since it will be attempting to look through some of the program file directories.
+
 # Running it locally
 To run it, open the solution and click "Run" or F5 in Visual Studio
 
