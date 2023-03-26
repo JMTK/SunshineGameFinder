@@ -41,7 +41,7 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
     var sunshineAppInstance = Newtonsoft.Json.JsonConvert.DeserializeObject<SunshineConfig>(File.ReadAllText(sunshineAppsJson));
     foreach (var platformDir in gameDirs)
     {
-        Logger.Log("Scanning for games in { platformDir}...");
+        Logger.Log($"Scanning for games in {platformDir}...");
         var di = new DirectoryInfo(platformDir);
         if (!di.Exists)
         {
