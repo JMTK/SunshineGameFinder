@@ -1,4 +1,4 @@
-﻿// See https://aka.ms/new-console-template for more information
+// See https://aka.ms/new-console-template for more information
 using Newtonsoft.Json;
 using SunshineGameFinder;
 using System.CommandLine;
@@ -35,32 +35,32 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
 
     if (!File.Exists(sunshineAppsJson))
     {
-        Console.WriteLine($"Could not find Sunshine Apps config at specified path: {sunshineAppsJson}");
+        Logger.Log($"Could not find Sunshine Apps config at specified path: {sunshineAppsJson}", LogLevel.Error);
         return;
     }
     var sunshineAppInstance = Newtonsoft.Json.JsonConvert.DeserializeObject<SunshineConfig>(File.ReadAllText(sunshineAppsJson));
     foreach (var platformDir in gameDirs)
     {
-        Console.WriteLine($"Scanning for games in {platformDir}...");
+        Logger.Log("Scanning for games in { platformDir}...");
         var di = new DirectoryInfo(platformDir);
         if (!di.Exists)
         {
-            Console.WriteLine($"Directory for platform {di.Name} does not exist, skipping...");
+            Logger.Log($"Directory for platform {di.Name} does not exist, skipping...", LogLevel.Warning);
             continue;
         }
         foreach (var gameDir in di.GetDirectories())
         {
-            Console.WriteLine($"Looking for game exe in {gameDir}...");
+            Logger.Log($"Looking for game exe in {gameDir}...");
             var gameName = gameDir.Name;
             if (exclusionWords.Any(ew => gameName.Contains(ew)))
             {
-                Console.WriteLine($"Skipping {gameName} as it was an excluded word match...");
+                Logger.Log($"Skipping {gameName} as it was an excluded word match...");
                 continue;
             }
             var exe = Directory.GetFiles(gameDir.FullName, "*.exe", SearchOption.AllDirectories).FirstOrDefault(exefile => !exeExclusionWords.Any(ew => new FileInfo(exefile).Name.Contains(ew)));
             if (string.IsNullOrEmpty(exe))
             {
-                Console.WriteLine($"EXE could not be found for game '{gameName}'");
+                Logger.Log($"EXE could not be found for game '{gameName}'", LogLevel.Warning);
                 continue;
             }
 
@@ -89,17 +89,18 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
                         workingdir = ""
                     };
                 }
-                Console.WriteLine($"Adding new game to Sunshine apps: {gameName} - {exe}");
+                Logger.Log($"Adding new game to Sunshine apps: {gameName} - {exe}");
                 sunshineAppInstance.apps.Add(existingApp);
             }
             else
             {
-                Console.WriteLine($"Found existing Sunshine app for {gameName} already!: " + (existingApp.cmd ?? existingApp.detached.FirstOrDefault() ?? existingApp.name).Trim());
+                Logger.Log($"Found existing Sunshine app for {gameName} already!: " + (existingApp.cmd ?? existingApp.detached.FirstOrDefault() ?? existingApp.name).Trim());
             }
         }
     }
-    Console.WriteLine("Complete!");
+    Logger.Log("Finding Games Completed");
     File.WriteAllText(sunshineAppsJson, JsonConvert.SerializeObject(sunshineAppInstance, Newtonsoft.Json.Formatting.Indented, new JsonSerializerSettings() { NullValueHandling = NullValueHandling.Ignore }));
+    Logger.Log("Saving Changes!", LogLevel.Success);
 
 }, addlDirectoriesOption, addlExeExclusionWords, sunshineConfigLocationOption);
 rootCommand.Invoke(args);
