@@ -6,27 +6,29 @@ var gameDirs = new string[] { @"C:\Program Files (x86)\Steam\steamapps\common", 
 var exclusionWords = new string[] { "Steam" };
 var exeExclusionWords = new string[] { "Steam", "Cleanup", "DX", "Uninstall", "Touchup", "redist", "Crash" };
 var sunshineAppsJson = @"C:\Program Files\Sunshine\config\apps.json";
+
+
 if (!File.Exists(sunshineAppsJson))
 {
-    Console.WriteLine($"Could not find Sunshine Apps config at specified path: {sunshineAppsJson}");
+    Logger.Log($"Could not find Sunshine Apps config at specified path: {sunshineAppsJson}", LogLevel.Error);
     return;
 }
 var sunshineAppInstance = Newtonsoft.Json.JsonConvert.DeserializeObject<SunshineConfig>(File.ReadAllText(sunshineAppsJson));
 foreach (var platformDir in gameDirs)
 {
-    Console.WriteLine($"Scanning for games in {platformDir}...");
+    Logger.Log($"Scanning for games in {platformDir}...");
     foreach (var gameDir in Directory.GetDirectories(platformDir))
     {
-        Console.WriteLine($"Looking for game exe in {gameDir}...");
+        Logger.Log($"Looking for game exe in {gameDir}...");
         var gameName = new DirectoryInfo(gameDir).Name;
         if (exclusionWords.Any(ew => gameName.Contains(ew)))
         {
-            Console.WriteLine($"Skipping {gameName} as it was an excluded word match...");
+            Logger.Log($"Skipping {gameName} as it was an excluded word match...");
             continue;
         }
         var exe = Directory.GetFiles(gameDir, "*.exe", SearchOption.AllDirectories).FirstOrDefault(exefile => !exeExclusionWords.Any(ew => new FileInfo(exefile).Name.Contains(ew)));
         if (string.IsNullOrEmpty(exe)) {
-            Console.WriteLine($"EXE could not be found for game '{gameName}'");
+            Logger.Log($"EXE could not be found for game '{gameName}'", LogLevel.Warning);
             continue;
         }
         
@@ -55,14 +57,15 @@ foreach (var platformDir in gameDirs)
                     workingdir = ""
                 };
             }
-            Console.WriteLine($"Adding new game to Sunshine apps: {gameName} - {exe}");
+            Logger.Log($"Adding new game to Sunshine apps: {gameName} - {exe}", LogLevel.Success);
             sunshineAppInstance.apps.Add(existingApp);
         }
         else
         {
-            Console.WriteLine($"Found existing Sunshine app for ${gameName} already!: " + (existingApp.cmd ?? existingApp.detached.FirstOrDefault() ?? existingApp.name).Trim());
+            Logger.Log($"Found existing Sunshine app for ${gameName} already!: " + (existingApp.cmd ?? existingApp.detached.FirstOrDefault() ?? existingApp.name).Trim());
         }
     }
 }
-Console.WriteLine("Complete!");
+Logger.Log("Finding Games Completed");
 File.WriteAllText(sunshineAppsJson, JsonConvert.SerializeObject(sunshineAppInstance, Newtonsoft.Json.Formatting.Indented, new JsonSerializerSettings() { NullValueHandling = NullValueHandling.Ignore }));
+Logger.Log("Saving Changes!");
