@@ -165,7 +165,14 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
         }
     }
     Logger.Log("Finding Games Completed");
-    if (FileWriter.UpdateConfig(sunshineAppsJson, sunshineAppInstance))
+    if (gamesAdded > 0)
+    {
+        if (FileWriter.UpdateConfig(sunshineAppsJson, sunshineAppInstance))
+        {
+            Logger.Log($"Apps config is updated! {gamesAdded} games were added. Check Sunshine to ensure all games were added.", LogLevel.Success);
+        }
+    }
+    else
     {
         Logger.Log("No new games were found to be added to Sunshine");
     }
