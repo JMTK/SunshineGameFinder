@@ -99,8 +99,10 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
         }
     }
     Logger.Log("Finding Games Completed");
-    File.WriteAllText(sunshineAppsJson, JsonConvert.SerializeObject(sunshineAppInstance, Newtonsoft.Json.Formatting.Indented, new JsonSerializerSettings() { NullValueHandling = NullValueHandling.Ignore }));
-    Logger.Log("Saving Changes!", LogLevel.Success);
+    if (FileWriter.UpdateConfig(sunshineAppsJson, sunshineAppInstance))
+    {
+        Logger.Log("Saving Changes!", LogLevel.Success);
+    }
 
 }, addlDirectoriesOption, addlExeExclusionWords, sunshineConfigLocationOption);
 rootCommand.Invoke(args);
