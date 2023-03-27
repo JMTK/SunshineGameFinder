@@ -16,7 +16,7 @@ var exclusionWords = new List<string>() { "Steam" };
 var exeExclusionWords = new List<string>() { "Steam", "Cleanup", "DX", "Uninstall", "Touchup", "redist", "Crash", "Editor" };
 
 // command setup
-RootCommand rootCommand = new RootCommand("Searches your computer for various common game install paths for the Sunshine application. After running it, all games that did not already exist will be added to the apps.json, meaning your Moonlight client should see them next time it is started.\r\n\r\n");
+RootCommand rootCommand = new RootCommand("Searches your computer for various common game install paths for the Sunshine application. After running it, all games that did not already exist will be added to the apps.json, meaning your Moonlight client should see them next time it is started.");
 var addlDirectoriesOption = new Option<string[]>("--addlDirectories", "Additional platform directories to search. ONLY looks for game directories in the top level of this folder.");
 addlDirectoriesOption.AllowMultipleArgumentsPerToken = true;
 addlDirectoriesOption.AddAlias("-d");
@@ -33,8 +33,20 @@ sunshineConfigLocationOption.AddAlias("-c");
 sunshineConfigLocationOption.SetDefaultValue(@"C:\Program Files\Sunshine\config\apps.json");
 rootCommand.AddOption(sunshineConfigLocationOption);
 
+var forceOption = new Option<bool>("--force", "Force update apps.json even if games already existed");
+forceOption.AllowMultipleArgumentsPerToken = false;
+forceOption.AddAlias("-f");
+forceOption.SetDefaultValue(false);
+rootCommand.AddOption(forceOption);
+
+Logger.Log($@"
+Thanks for using the Sunshine Game Finder! 
+Searches your computer for various common game install paths for the Sunshine application. After running it, all games that did not already exist will be added to the apps.json, meaning your Moonlight client should see them next time it is started.
+
+Have an issue or an idea? Come contribute at https://github.com/JMTK/SunshineGameFinder
+");
 // options handler
-rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLocation) =>
+rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLocation, forceUpdate) =>
 {
     gameDirs.AddRange(addlDirectories);
     exeExclusionWords.AddRange(addlExeExclusionWords);
@@ -46,6 +58,7 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
         return;
     }
     var sunshineAppInstance = JsonConvert.DeserializeObject<SunshineConfig>(File.ReadAllText(sunshineAppsJson));
+    var gamesAdded = 0;
     if (sunshineAppInstance == null)
         return;
 
@@ -78,7 +91,7 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
             }
 
             var existingApp = sunshineAppInstance.apps.FirstOrDefault(g => g.cmd == exe || g.name == gameName);
-            if (existingApp == null)
+            if (forceUpdate || existingApp == null)
             {
                 if (exe.Contains("gamelaunchhelper.exe"))
                 {
@@ -102,6 +115,7 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
                         workingdir = ""
                     };
                 }
+                gamesAdded++;
                 Logger.Log($"Adding new game to Sunshine apps: {gameName} - {exe}");
                 sunshineAppInstance.apps.Add(existingApp);
             }
@@ -110,6 +124,7 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
                 Logger.Log($"Found existing Sunshine app for {gameName} already!: " + (existingApp.cmd ?? existingApp.detached.FirstOrDefault() ?? existingApp.name).Trim());
             }
         }
+        Console.WriteLine(""); //blank line to separate platforms
     }
 
     var logicalDrives = DriveInfo.GetDrives();
@@ -149,8 +164,8 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
     Logger.Log("Finding Games Completed");
     if (FileWriter.UpdateConfig(sunshineAppsJson, sunshineAppInstance))
     {
-        Logger.Log("Saving Changes!", LogLevel.Success);
+        Logger.Log("No new games were found to be added to Sunshine");
     }
 
-}, addlDirectoriesOption, addlExeExclusionWords, sunshineConfigLocationOption);
+}, addlDirectoriesOption, addlExeExclusionWords, sunshineConfigLocationOption, forceOption);
 rootCommand.Invoke(args);
