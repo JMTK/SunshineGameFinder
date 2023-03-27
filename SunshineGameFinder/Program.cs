@@ -1,10 +1,17 @@
 // See https://aka.ms/new-console-template for more information
+using Gameloop.Vdf;
+using Gameloop.Vdf.Linq;
 using Newtonsoft.Json;
 using SunshineGameFinder;
 using System.CommandLine;
+using System.Text.RegularExpressions;
+
+// constants
+const string wildcatDrive = @"*:\";
+const string steamLibraryFolders = @"Program Files (x86)\Steam\steamapps\libraryfolders.vdf";
 
 // default values
-var gameDirs = new List<string>() { @"C:\Program Files (x86)\Steam\steamapps\common", @"C:\XboxGames", @"C:\Program Files\EA Games" };
+var gameDirs = new List<string>() { @"*:\Program Files (x86)\Steam\steamapps\common", @"*:\XboxGames", @"*:\Program Files\EA Games", @"*:\Program Files\Epic Games\" };
 var exclusionWords = new List<string>() { "Steam" };
 var exeExclusionWords = new List<string>() { "Steam", "Cleanup", "DX", "Uninstall", "Touchup", "redist", "Crash", "Editor" };
 
@@ -50,16 +57,22 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
         Logger.Log($"Could not find Sunshine Apps config at specified path: {sunshineAppsJson}", LogLevel.Error);
         return;
     }
-    var sunshineAppInstance = Newtonsoft.Json.JsonConvert.DeserializeObject<SunshineConfig>(File.ReadAllText(sunshineAppsJson));
+    var sunshineAppInstance = JsonConvert.DeserializeObject<SunshineConfig>(File.ReadAllText(sunshineAppsJson));
     var gamesAdded = 0;
-    foreach (var platformDir in gameDirs)
+    if (sunshineAppInstance == null)
     {
-        Logger.Log($"Scanning for games in {platformDir}...");
-        var di = new DirectoryInfo(platformDir);
+        Logger.Log($"Sunshite app list is null", LogLevel.Error);
+        return;
+    }
+
+    void ScanFolder(string folder)
+    {
+        Logger.Log($"Scanning for games in {folder}...");
+        var di = new DirectoryInfo(folder);
         if (!di.Exists)
         {
             Logger.Log($"Directory for platform {di.Name} does not exist, skipping...", LogLevel.Warning);
-            continue;
+            return;
         }
         foreach (var gameDir in di.GetDirectories())
         {
@@ -116,7 +129,42 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
         }
         Console.WriteLine(""); //blank line to separate platforms
     }
-    Logger.Log("Finding Games Completed!");
+
+    var logicalDrives = DriveInfo.GetDrives();
+    var wildcatDriveLetter = new Regex(Regex.Escape(wildcatDrive));
+
+    foreach (var drive in logicalDrives)
+    {
+        var libraryFoldersPath = drive.Name + steamLibraryFolders;
+        var file = new FileInfo(libraryFoldersPath);
+        if (!file.Exists)
+        {
+            Logger.Log($"libraryfolders.vdf not found on {file.DirectoryName}, skipping...", LogLevel.Warning);
+            continue;
+        }
+        var libraries = VdfConvert.Deserialize(File.ReadAllText(libraryFoldersPath));
+        foreach(var library in libraries.Value)
+        {
+            if (library is not VProperty libProp)
+                continue;
+
+            gameDirs.Add($@"{libProp.Value.Value<string>("path")}\steamapps\common");
+        }
+    }
+
+    foreach (var platformDir in gameDirs)
+    {
+        if (platformDir.StartsWith(wildcatDrive))
+        {
+            foreach (var drive in logicalDrives)
+                ScanFolder(wildcatDriveLetter.Replace(platformDir, drive.Name, 1));
+        }
+        else
+        {
+            ScanFolder(platformDir);
+        }
+    }
+    Logger.Log("Finding Games Completed");
     if (gamesAdded > 0)
     {
         if (FileWriter.UpdateConfig(sunshineAppsJson, sunshineAppInstance))
