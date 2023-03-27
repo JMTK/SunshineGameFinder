@@ -1,10 +1,15 @@
 // See https://aka.ms/new-console-template for more information
 using Newtonsoft.Json;
 using SunshineGameFinder;
+using System;
 using System.CommandLine;
+using System.Text.RegularExpressions;
+
+// constants
+const string wildcatDrive = @"*:\";
 
 // default values
-var gameDirs = new List<string>() { @"C:\Program Files (x86)\Steam\steamapps\common", @"C:\XboxGames", @"C:\Program Files\EA Games" };
+var gameDirs = new List<string>() { @"*:\Program Files (x86)\Steam\steamapps\common", @"*:\XboxGames", @"*:\Program Files\EA Games" };
 var exclusionWords = new List<string>() { "Steam" };
 var exeExclusionWords = new List<string>() { "Steam", "Cleanup", "DX", "Uninstall", "Touchup", "redist", "Crash", "Editor" };
 
@@ -38,15 +43,18 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
         Logger.Log($"Could not find Sunshine Apps config at specified path: {sunshineAppsJson}", LogLevel.Error);
         return;
     }
-    var sunshineAppInstance = Newtonsoft.Json.JsonConvert.DeserializeObject<SunshineConfig>(File.ReadAllText(sunshineAppsJson));
-    foreach (var platformDir in gameDirs)
+    var sunshineAppInstance = JsonConvert.DeserializeObject<SunshineConfig>(File.ReadAllText(sunshineAppsJson));
+    if (sunshineAppInstance == null)
+        return;
+
+    void ScanFolder(string folder)
     {
-        Logger.Log($"Scanning for games in {platformDir}...");
-        var di = new DirectoryInfo(platformDir);
+        Logger.Log($"Scanning for games in {folder}...");
+        var di = new DirectoryInfo(folder);
         if (!di.Exists)
         {
             Logger.Log($"Directory for platform {di.Name} does not exist, skipping...", LogLevel.Warning);
-            continue;
+            return;
         }
         foreach (var gameDir in di.GetDirectories())
         {
@@ -99,6 +107,22 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
             {
                 Logger.Log($"Found existing Sunshine app for {gameName} already!: " + (existingApp.cmd ?? existingApp.detached.FirstOrDefault() ?? existingApp.name).Trim());
             }
+        }
+    }
+
+    var logicalDrives = DriveInfo.GetDrives();
+    var wildcatDriveLetter = new Regex(Regex.Escape(wildcatDrive));
+
+    foreach (var platformDir in gameDirs)
+    {
+        if (platformDir.StartsWith(wildcatDrive))
+        {
+            foreach (var drive in logicalDrives)
+                ScanFolder(wildcatDriveLetter.Replace(platformDir, drive.Name, 1));
+        }
+        else
+        {
+            ScanFolder(platformDir);
         }
     }
     Logger.Log("Finding Games Completed");
