@@ -1,12 +1,14 @@
 // See https://aka.ms/new-console-template for more information
+using Gameloop.Vdf;
+using Gameloop.Vdf.Linq;
 using Newtonsoft.Json;
 using SunshineGameFinder;
-using System;
 using System.CommandLine;
 using System.Text.RegularExpressions;
 
 // constants
 const string wildcatDrive = @"*:\";
+const string steamLibraryFolders = @"Program Files (x86)\Steam\steamapps\libraryfolders.vdf";
 
 // default values
 var gameDirs = new List<string>() { @"*:\Program Files (x86)\Steam\steamapps\common", @"*:\XboxGames", @"*:\Program Files\EA Games" };
@@ -112,6 +114,25 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
 
     var logicalDrives = DriveInfo.GetDrives();
     var wildcatDriveLetter = new Regex(Regex.Escape(wildcatDrive));
+
+    foreach (var drive in logicalDrives)
+    {
+        var libraryFoldersPath = drive.Name + steamLibraryFolders;
+        var file = new FileInfo(libraryFoldersPath);
+        if (!file.Exists)
+        {
+            Logger.Log($"{file.FullName} does not exist, skipping...", LogLevel.Warning);
+            continue;
+        }
+        var libraries = VdfConvert.Deserialize(File.ReadAllText(libraryFoldersPath));
+        foreach(var library in libraries.Value)
+        {
+            if (library is not VProperty libProp)
+                continue;
+
+            gameDirs.Add($@"{libProp.Value.Value<string>("path")}\steamapps\common");
+        }
+    }
 
     foreach (var platformDir in gameDirs)
     {
