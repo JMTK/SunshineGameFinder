@@ -60,7 +60,10 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
     var sunshineAppInstance = JsonConvert.DeserializeObject<SunshineConfig>(File.ReadAllText(sunshineAppsJson));
     var gamesAdded = 0;
     if (sunshineAppInstance == null)
+    {
+        Logger.Log($"Sunshite app list is null", LogLevel.Error);
         return;
+    }
 
     void ScanFolder(string folder)
     {
