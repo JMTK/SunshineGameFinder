@@ -6,7 +6,7 @@ using System.CommandLine;
 // default values
 var gameDirs = new List<string>() { @"C:\Program Files (x86)\Steam\steamapps\common", @"C:\XboxGames", @"C:\Program Files\EA Games" };
 var exclusionWords = new List<string>() { "Steam" };
-var exeExclusionWords = new List<string>() { "Steam", "Cleanup", "DX", "Uninstall", "Touchup", "redist", "Crash" };
+var exeExclusionWords = new List<string>() { "Steam", "Cleanup", "DX", "Uninstall", "Touchup", "redist", "Crash", "Editor" };
 
 // command setup
 RootCommand rootCommand = new RootCommand("Searches your computer for various common game install paths for the Sunshine application. After running it, all games that did not already exist will be added to the apps.json, meaning your Moonlight client should see them next time it is started.\r\n\r\n");
@@ -57,7 +57,10 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
                 Logger.Log($"Skipping {gameName} as it was an excluded word match...");
                 continue;
             }
-            var exe = Directory.GetFiles(gameDir.FullName, "*.exe", SearchOption.AllDirectories).FirstOrDefault(exefile => !exeExclusionWords.Any(ew => new FileInfo(exefile).Name.Contains(ew)));
+            var exe = Directory.GetFiles(gameDir.FullName, "*.exe", SearchOption.AllDirectories).FirstOrDefault(exefile => {
+                var exeName = new FileInfo(exefile).Name.ToLower();
+                return exeName == gameName.ToLower() || !exeExclusionWords.Any(ew => exeName.Contains(ew.ToLower()));
+            });
             if (string.IsNullOrEmpty(exe))
             {
                 Logger.Log($"EXE could not be found for game '{gameName}'", LogLevel.Warning);
