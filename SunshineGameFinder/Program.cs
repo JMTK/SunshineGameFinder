@@ -139,7 +139,7 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
         var file = new FileInfo(libraryFoldersPath);
         if (!file.Exists)
         {
-            Logger.Log($"{file.FullName} does not exist, skipping...", LogLevel.Warning);
+            Logger.Log($"libraryfolders.vdf not found on {file.DirectoryName}, skipping...", LogLevel.Warning);
             continue;
         }
         var libraries = VdfConvert.Deserialize(File.ReadAllText(libraryFoldersPath));
