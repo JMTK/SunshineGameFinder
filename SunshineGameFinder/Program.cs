@@ -51,6 +51,7 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
     gameDirs.AddRange(addlDirectories);
     exeExclusionWords.AddRange(addlExeExclusionWords);
     var sunshineAppsJson = sunshineConfigLocation;
+    var sunshineRootFolder = Path.GetDirectoryName(sunshineAppsJson);
 
     if (!File.Exists(sunshineAppsJson))
     {
@@ -117,6 +118,16 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
                         cmd = exe,
                         workingdir = ""
                     };
+                }
+                string coversFolderPath = sunshineRootFolder + "/covers/";
+                string fullPathOfCoverImage = ImageScraper.SaveIGDBImageToCoversFolder(gameName, coversFolderPath).Result;
+                if (!string.IsNullOrEmpty(fullPathOfCoverImage))
+                {
+                    existingApp.imagepath = fullPathOfCoverImage;
+                }
+                else
+                {
+                    Logger.Log("Failed to find cover image for " + gameName, LogLevel.Warning);
                 }
                 gamesAdded++;
                 Logger.Log($"Adding new game to Sunshine apps: {gameName} - {exe}");
