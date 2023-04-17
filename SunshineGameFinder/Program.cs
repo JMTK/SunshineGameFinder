@@ -39,6 +39,12 @@ forceOption.AddAlias("-f");
 forceOption.SetDefaultValue(false);
 rootCommand.AddOption(forceOption);
 
+var removeUninstalledOption = new Option<bool>("--remove-uninstalled", "Removes apps whose exes can not be found");
+removeUninstalledOption.AllowMultipleArgumentsPerToken = false;
+removeUninstalledOption.AddAlias("-ru");
+removeUninstalledOption.SetDefaultValue(false);
+rootCommand.AddOption(removeUninstalledOption);
+
 Logger.Log($@"
 Thanks for using the Sunshine Game Finder! 
 Searches your computer for various common game install paths for the Sunshine application. After running it, all games that did not already exist will be added to the apps.json, meaning your Moonlight client should see them next time it is started.
@@ -46,7 +52,7 @@ Searches your computer for various common game install paths for the Sunshine ap
 Have an issue or an idea? Come contribute at https://github.com/JMTK/SunshineGameFinder
 ");
 // options handler
-rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLocation, forceUpdate) =>
+rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLocation, forceUpdate, removeUninstalled) =>
 {
     gameDirs.AddRange(addlDirectories);
     exeExclusionWords.AddRange(addlExeExclusionWords);
@@ -60,6 +66,33 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
     }
     var sunshineAppInstance = JsonConvert.DeserializeObject<SunshineConfig>(File.ReadAllText(sunshineAppsJson));
     var gamesAdded = 0;
+    var gamesRemoved = 0;
+
+    if (removeUninstalled)
+    {
+        for (int i = sunshineAppInstance.apps.Count() - 1; i >= 0; i--) //keep tolist so we can remove elements while iterating on the "copy"
+        {
+            var existingApp = sunshineAppInstance.apps[i];
+            if (existingApp != null)
+            {
+                var exeStillExists = existingApp.cmd == null && existingApp.detached == null || 
+                                     existingApp.cmd != null && File.Exists(existingApp.cmd) || 
+                                     existingApp.detached != null && existingApp.detached.Any(detachedCommand =>
+                                     {
+                                         return detachedCommand == null ||
+                                          !detachedCommand.Contains("exe") ||
+                                          detachedCommand != null && detachedCommand.EndsWith("exe") && File.Exists(detachedCommand);
+                                     });
+                if (!exeStillExists)
+                {
+                    Logger.Log($"{existingApp.name} no longer has an exe, removing from apps config...");
+                    sunshineAppInstance.apps.RemoveAt(i);
+                    gamesRemoved++;
+                }
+            }
+        }
+    }
+
     if (sunshineAppInstance == null)
     {
         Logger.Log($"Sunshite app list is null", LogLevel.Error);
@@ -176,11 +209,11 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
         }
     }
     Logger.Log("Finding Games Completed");
-    if (gamesAdded > 0)
+    if (gamesAdded > 0 || gamesRemoved > 0)
     {
         if (FileWriter.UpdateConfig(sunshineAppsJson, sunshineAppInstance))
         {
-            Logger.Log($"Apps config is updated! {gamesAdded} games were added. Check Sunshine to ensure all games were added.", LogLevel.Success);
+            Logger.Log($"Apps config is updated! {gamesAdded} apps were added. {gamesRemoved} apps were removed. Check Sunshine to ensure all games were added.", LogLevel.Success);
         }
     }
     else
@@ -188,5 +221,5 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
         Logger.Log("No new games were found to be added to Sunshine");
     }
 
-}, addlDirectoriesOption, addlExeExclusionWords, sunshineConfigLocationOption, forceOption);
+}, addlDirectoriesOption, addlExeExclusionWords, sunshineConfigLocationOption, forceOption, removeUninstalledOption);
 rootCommand.Invoke(args);
