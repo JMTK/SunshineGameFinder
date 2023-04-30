@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "SunshineGameFinder": {
+      "commandName": "Project",
+      "commandLineArgs": "-ru"
+    }
+  }
+}
