@@ -11,9 +11,15 @@ const string wildcatDrive = @"*:\";
 const string steamLibraryFolders = @"Program Files (x86)\Steam\steamapps\libraryfolders.vdf";
 
 // default values
-var gameDirs = new List<string>() { @"*:\Program Files (x86)\Steam\steamapps\common", @"*:\XboxGames", @"*:\Program Files\EA Games", @"*:\Program Files\Epic Games\", @"*:\Program Files (x86)\Ubisoft\Ubisoft Game Launcher\games" };
+var gameDirs = new List<string>() { 
+    @"*:\Program Files (x86)\Steam\steamapps\common", 
+    @"*:\XboxGames", @"*:\Program Files\EA Games", 
+    @"*:\Program Files\Epic Games\", 
+    @"*:\Program Files (x86)\Ubisoft\Ubisoft Game Launcher\games" 
+};
 var exclusionWords = new List<string>() { "Steam" };
 var exeExclusionWords = new List<string>() { "Steam", "Cleanup", "DX", "Uninstall", "Touchup", "redist", "Crash", "Editor" };
+var registryExclusionWords = new List<string>() {/*blah blah blah*/ };
 
 // command setup
 RootCommand rootCommand = new RootCommand("Searches your computer for various common game install paths for the Sunshine application. After running it, all games that did not already exist will be added to the apps.json, meaning your Moonlight client should see them next time it is started.");
@@ -117,7 +123,8 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
                 Logger.Log($"Skipping {gameName} as it was an excluded word match...");
                 continue;
             }
-            var exe = Directory.GetFiles(gameDir.FullName, "*.exe", SearchOption.AllDirectories).FirstOrDefault(exefile => {
+            var exe = Directory.GetFiles(gameDir.FullName, "*.exe", SearchOption.AllDirectories)
+            .FirstOrDefault(exefile => {
                 var exeName = new FileInfo(exefile).Name.ToLower();
                 return exeName == gameName.ToLower() || !exeExclusionWords.Any(ew => exeName.Contains(ew.ToLower()));
             });
