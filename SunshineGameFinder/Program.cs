@@ -1,6 +1,7 @@
 // See https://aka.ms/new-console-template for more information
 using Gameloop.Vdf;
 using Gameloop.Vdf.Linq;
+using Microsoft.Win32;
 using Newtonsoft.Json;
 using SunshineGameFinder;
 using System.CommandLine;
@@ -15,7 +16,7 @@ var gameDirs = new List<string>() {
     @"*:\Program Files (x86)\Steam\steamapps\common", 
     @"*:\XboxGames", @"*:\Program Files\EA Games", 
     @"*:\Program Files\Epic Games\", 
-    @"*:\Program Files (x86)\Ubisoft\Ubisoft Game Launcher\games" 
+    @"*:\Program Files (x86)\Ubisoft\Ubisoft Game Launcher\games"
 };
 var exclusionWords = new List<string>() { "Steam" };
 var exeExclusionWords = new List<string>() { "Steam", "Cleanup", "DX", "Uninstall", "Touchup", "redist", "Crash", "Editor" };
