@@ -2,7 +2,7 @@
 
 using Microsoft.Win32;
 
-internal class Program
+internal partial class Program
 {
     private static void Main(string[] args)
     {
@@ -50,7 +50,7 @@ internal class Program
             string MakePathGooder(string path)
             {
                 string temp = string.Concat("*", path.AsSpan(1));
-                string gooderPath = temp.Replace("/", @"\");
+                string gooderPath = temp.Replace('/', Path.DirectorySeparatorChar);
 
                 return gooderPath;
             }
