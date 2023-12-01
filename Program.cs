@@ -21,8 +21,8 @@ var gameDirs = new List<string>() {
 
 var registryDir = new List<string>()
 {
-    @"SOFTWARE\Wow6432Node\Valve\Steam",
-    @"SOFTWARE\Valve\Steam"
+    //@"SOFTWARE\Wow6432Node\Valve\Steam",
+    //@"SOFTWARE\Valve\Steam"
     //Other installer registry paths...
 };
 
@@ -131,7 +131,9 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
                 Logger.Log($"Skipping {gameName} as it was an excluded word match...");
                 continue;
             }
-            var exe = Directory.GetFiles(gameDir.FullName, "*.exe", SearchOption.AllDirectories).FirstOrDefault(exefile => 
+            var exe = Directory.GetFiles(gameDir.FullName, "*.exe", SearchOption.AllDirectories)
+            .OrderBy(f => new FileInfo(f).Length)
+            .FirstOrDefault(exefile => 
             {
                 var exeName = new FileInfo(exefile).Name.ToLower();
                 return exeName == gameName.ToLower() || !exeExclusionWords.Any(ew => exeName.Contains(ew.ToLower()));
@@ -265,6 +267,11 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
         }
         if (!isSteamLibraryFound)
         {
+            registryDir = new List<string>
+            {
+                @"SOFTWARE\Wow6432Node\Valve\Steam",
+                @"SOFTWARE\Valve\Steam"
+            };
             RegistrySearch();
         }
     }
