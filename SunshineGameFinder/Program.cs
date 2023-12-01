@@ -13,14 +13,21 @@ const string steamLibraryFolders = @"Program Files (x86)\Steam\steamapps\library
 
 // default values
 var gameDirs = new List<string>() { 
-    @"*:\Program Files (x86)\Steam\steamapps\common", 
-    @"*:\XboxGames", @"*:\Program Files\EA Games", 
-    @"*:\Program Files\Epic Games\", 
-    @"*:\Program Files (x86)\Ubisoft\Ubisoft Game Launcher\games"
+    //@"*:\Program Files (x86)\Steam\steamapps\common", 
+    //@"*:\XboxGames", @"*:\Program Files\EA Games", 
+    //@"*:\Program Files\Epic Games\", 
+    //@"*:\Program Files (x86)\Ubisoft\Ubisoft Game Launcher\games"
 };
+
+var registryDir = new List<string>()
+{
+    @"SOFTWARE\Wow6432Node\Valve\Steam",
+    @"SOFTWARE\Valve\Steam"
+    //Other installer registry paths...
+};
+
 var exclusionWords = new List<string>() { "Steam" };
 var exeExclusionWords = new List<string>() { "Steam", "Cleanup", "DX", "Uninstall", "Touchup", "redist", "Crash", "Editor" };
-var registryExclusionWords = new List<string>() {/*blah blah blah*/ };
 
 // command setup
 RootCommand rootCommand = new RootCommand("Searches your computer for various common game install paths for the Sunshine application. After running it, all games that did not already exist will be added to the apps.json, meaning your Moonlight client should see them next time it is started.");
@@ -182,25 +189,122 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
         Console.WriteLine(""); //blank line to separate platforms
     }
 
+    string MakePathGooder(string path)
+    {
+        string temp = string.Concat("*", $@"{path.AsSpan(1)}") + @"\steamapps\common";
+        string gooderPath = temp.Replace('/', Path.DirectorySeparatorChar);
+
+        return gooderPath;
+    }
+
     var logicalDrives = DriveInfo.GetDrives();
     var wildcatDriveLetter = new Regex(Regex.Escape(wildcatDrive));
 
-    foreach (var drive in logicalDrives)
+    if (OperatingSystem.IsWindows())
     {
-        var libraryFoldersPath = drive.Name + steamLibraryFolders;
-        var file = new FileInfo(libraryFoldersPath);
-        if (!file.Exists)
+        gameDirs = new List<string>
         {
-            Logger.Log($"libraryfolders.vdf not found on {file.DirectoryName}, skipping...", LogLevel.Warning);
-            continue;
-        }
-        var libraries = VdfConvert.Deserialize(File.ReadAllText(libraryFoldersPath));
-        foreach(var library in libraries.Value)
-        {
-            if (library is not VProperty libProp)
-                continue;
+            @"*:\Program Files (x86)\Steam\steamapps\common",
+            @"*:\XboxGames", 
+            @"*:\Program Files\EA Games",
+            @"*:\Program Files\Epic Games\",
+            @"*:\Program Files (x86)\Ubisoft\Ubisoft Game Launcher\games"
+            //Other common directories
+        };
 
-            gameDirs.Add($@"{libProp.Value.Value<string>("path")}\steamapps\common");
+        bool isLibraryFound = false;
+        foreach (var drive in logicalDrives)
+        {
+            var libraryFoldersPath = drive.Name + steamLibraryFolders;
+            var file = new FileInfo(libraryFoldersPath);
+            if (!file.Exists)
+            {
+                Logger.Log($"libraryfolders.vdf not found on {file.DirectoryName}, skipping...", LogLevel.Warning);
+                continue;
+            }
+            var libraries = VdfConvert.Deserialize(File.ReadAllText(libraryFoldersPath));
+            foreach (var library in libraries.Value)
+            {
+                if (library is not VProperty libProp)
+                    continue;
+
+                gameDirs.Add($@"{libProp.Value.Value<string>("path")}\steamapps\common");
+                isLibraryFound = true;
+            }
+        }
+        if (!isLibraryFound)
+        {
+            foreach (var path in registryDir)
+            {
+                if (path.ToLower().Contains("steam"))
+                {
+                    RegistryKey? steamRegistry = Registry.LocalMachine.OpenSubKey(path);
+                    if (steamRegistry != null && steamRegistry.GetValue("SteamPath") != null)
+                    {
+                        string temp = steamRegistry.GetValue("SteamPath").ToString();
+                        temp = MakePathGooder(temp);
+                        gameDirs.Add(temp);
+                    }
+                    else
+                    {
+                        steamRegistry = Registry.CurrentUser.OpenSubKey(path);
+                        if (steamRegistry != null && steamRegistry.GetValue("SteamPath") != null)
+                        {
+                            string temp = steamRegistry.GetValue("SteamPath").ToString();
+                            temp = MakePathGooder(temp);
+                            gameDirs.Add(temp);
+                        }
+                    }
+                }
+                /*else if (path contains other installer keywords)
+                {
+                    
+                }*/
+            }
+        }
+    }
+    else
+    {
+        string userInfo = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (OperatingSystem.IsLinux())
+        {
+            var linuxPaths = new List<string>()
+            {
+                //Conflicting data on whether it's SteamApps or steamapps so here's both
+                @"/.local/share/Steam/SteamApps/common",
+                @"/.local/share/Steam/steamapps/common",
+                @"/.local/share/Steam/SteamApps/compatdata",
+                @"/.local/share/Steam/steamapps/compatdata"
+                //Other common directories (rockstar, epic, etc)
+            };
+
+            foreach (var path in linuxPaths)
+            {
+                string linuxInstallPath = string.Concat(userInfo, path);
+                if (Directory.Exists(linuxInstallPath))
+                {
+                    gameDirs.Add(linuxInstallPath);
+                }
+            }
+
+
+        }
+        else if (OperatingSystem.IsMacOS())
+        {
+            var macOSPaths = new List<string>()
+            {
+                @"/Library/Application Support/Steam/SteamApps/common"
+                //Other common directories (rockstar, epic, etc)
+            };
+
+            foreach (var path in macOSPaths)
+            {
+                string macInstallPath = string.Concat(userInfo, path);
+                if (Directory.Exists(macInstallPath))
+                {
+                    gameDirs.Add(macInstallPath);
+                }
+            }
         }
     }
 
