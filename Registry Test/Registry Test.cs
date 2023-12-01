@@ -31,7 +31,6 @@ internal partial class Program
                         steamRegistry = Registry.CurrentUser.OpenSubKey(path);
                         if (steamRegistry != null && steamRegistry.GetValue("SteamPath") != null)
                         {
-                            //temp string here to remove drive letter and replace with *
                             string temp = steamRegistry.GetValue("SteamPath").ToString();
                             temp = MakePathGooder(temp);
                             installPaths.Add(temp);
@@ -42,13 +41,7 @@ internal partial class Program
             }
 
 
-            string MakePathGooder(string path)
-            {
-                string temp = string.Concat("*", $@"{path.AsSpan(1)}") + @"\steamapps\common";
-                string gooderPath = temp.Replace('/', Path.DirectorySeparatorChar);
-
-                return gooderPath;
-            }
+ 
         }
         else
         {
@@ -57,10 +50,12 @@ internal partial class Program
             {
                 var linuxPaths = new List<string>()
                 {
+                    //Conflicting data on whether it's SteamApps or steamapps so here's both
                     @"/.local/share/Steam/SteamApps/common",
                     @"/.local/share/Steam/steamapps/common",
                     @"/.local/share/Steam/SteamApps/compatdata",
                     @"/.local/share/Steam/steamapps/compatdata"
+                    //Other common directories (rockstar, epic, etc)
                 };
 
                 foreach (var path in linuxPaths)
@@ -79,6 +74,7 @@ internal partial class Program
                 var macOSPaths = new List<string>()
                 {
                     @"/Library/Application Support/Steam/SteamApps/common"
+                    //Other common directories (rockstar, epic, etc)
                 };
 
                 foreach (var path in macOSPaths)
@@ -96,6 +92,14 @@ internal partial class Program
         {
             Console.WriteLine(path);
 
+        }
+
+        string MakePathGooder(string path)
+        {
+            string temp = string.Concat("*", $@"{path.AsSpan(1)}") + @"\steamapps\common";
+            string gooderPath = temp.Replace('/', Path.DirectorySeparatorChar);
+
+            return gooderPath;
         }
 
     }

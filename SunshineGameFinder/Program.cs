@@ -131,8 +131,8 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
                 Logger.Log($"Skipping {gameName} as it was an excluded word match...");
                 continue;
             }
-            var exe = Directory.GetFiles(gameDir.FullName, "*.exe", SearchOption.AllDirectories)
-            .FirstOrDefault(exefile => {
+            var exe = Directory.GetFiles(gameDir.FullName, "*.exe", SearchOption.AllDirectories).FirstOrDefault(exefile => 
+            {
                 var exeName = new FileInfo(exefile).Name.ToLower();
                 return exeName == gameName.ToLower() || !exeExclusionWords.Any(ew => exeName.Contains(ew.ToLower()));
             });
@@ -197,6 +197,37 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
         return gooderPath;
     }
 
+    void RegistrySearch()
+    {
+        foreach (var path in registryDir)
+        {
+            if (path.ToLower().Contains("steam"))
+            {
+                RegistryKey? steamRegistry = Registry.LocalMachine.OpenSubKey(path);
+                if (steamRegistry != null && steamRegistry.GetValue("SteamPath") != null)
+                {
+                    string temp = steamRegistry.GetValue("SteamPath").ToString();
+                    temp = MakePathGooder(temp);
+                    gameDirs.Add(temp);
+                }
+                else
+                {
+                    steamRegistry = Registry.CurrentUser.OpenSubKey(path);
+                    if (steamRegistry != null && steamRegistry.GetValue("SteamPath") != null)
+                    {
+                        string temp = steamRegistry.GetValue("SteamPath").ToString();
+                        temp = MakePathGooder(temp);
+                        gameDirs.Add(temp);
+                    }
+                }
+            }
+            /*else if (path contains other installer keywords)
+            {
+                
+            }*/
+        }
+    }
+
     var logicalDrives = DriveInfo.GetDrives();
     var wildcatDriveLetter = new Regex(Regex.Escape(wildcatDrive));
 
@@ -212,7 +243,7 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
             //Other common directories
         };
 
-        bool isLibraryFound = false;
+        bool isSteamLibraryFound = false;
         foreach (var drive in logicalDrives)
         {
             var libraryFoldersPath = drive.Name + steamLibraryFolders;
@@ -229,38 +260,12 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
                     continue;
 
                 gameDirs.Add($@"{libProp.Value.Value<string>("path")}\steamapps\common");
-                isLibraryFound = true;
+                isSteamLibraryFound = true;
             }
         }
-        if (!isLibraryFound)
+        if (!isSteamLibraryFound)
         {
-            foreach (var path in registryDir)
-            {
-                if (path.ToLower().Contains("steam"))
-                {
-                    RegistryKey? steamRegistry = Registry.LocalMachine.OpenSubKey(path);
-                    if (steamRegistry != null && steamRegistry.GetValue("SteamPath") != null)
-                    {
-                        string temp = steamRegistry.GetValue("SteamPath").ToString();
-                        temp = MakePathGooder(temp);
-                        gameDirs.Add(temp);
-                    }
-                    else
-                    {
-                        steamRegistry = Registry.CurrentUser.OpenSubKey(path);
-                        if (steamRegistry != null && steamRegistry.GetValue("SteamPath") != null)
-                        {
-                            string temp = steamRegistry.GetValue("SteamPath").ToString();
-                            temp = MakePathGooder(temp);
-                            gameDirs.Add(temp);
-                        }
-                    }
-                }
-                /*else if (path contains other installer keywords)
-                {
-                    
-                }*/
-            }
+            RegistrySearch();
         }
     }
     else
