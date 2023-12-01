@@ -283,6 +283,20 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
                 //Other common directories (rockstar, epic, etc)
             };
 
+            var libraryFoldersPath = userInfo + @"/.local/share/Steam/steamapps/libraryfolders";
+            var file = new FileInfo(libraryFoldersPath);
+            if (!file.Exists)
+            {
+                Logger.Log($"libraryfolders.vdf not found on {file.DirectoryName}, skipping...", LogLevel.Warning);
+            }
+            var libraries = VdfConvert.Deserialize(File.ReadAllText(libraryFoldersPath));
+            foreach (var library in libraries.Value)
+            {
+                if (library is not VProperty libProp)
+                    continue;
+
+                gameDirs.Add($@"{libProp.Value.Value<string>("path")}/steamapps/common");
+            }
             foreach (var path in linuxPaths)
             {
                 string linuxInstallPath = string.Concat(userInfo, path);
@@ -301,7 +315,20 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
                 @"/Library/Application Support/Steam/SteamApps/common"
                 //Other common directories (rockstar, epic, etc)
             };
+            var libraryFoldersPath = userInfo + @"/Library/Application Support/Steam/SteamApps/libraryfolders";
+            var file = new FileInfo(libraryFoldersPath);
+            if (!file.Exists)
+            {
+                Logger.Log($"libraryfolders.vdf not found on {file.DirectoryName}, skipping...", LogLevel.Warning);
+            }
+            var libraries = VdfConvert.Deserialize(File.ReadAllText(libraryFoldersPath));
+            foreach (var library in libraries.Value)
+            {
+                if (library is not VProperty libProp)
+                    continue;
 
+                gameDirs.Add($@"{libProp.Value.Value<string>("path")}/steamapps/common");
+            }
             foreach (var path in macOSPaths)
             {
                 string macInstallPath = string.Concat(userInfo, path);
