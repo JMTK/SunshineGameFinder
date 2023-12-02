@@ -57,198 +57,201 @@ Have an issue or an idea? Come contribute at https://github.com/JMTK/SunshineGam
 // options handler
 rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLocation, forceUpdate, removeUninstalled) =>
 {
-gameDirs.AddRange(addlDirectories);
-exeExclusionWords.AddRange(addlExeExclusionWords);
-var sunshineAppsJson = sunshineConfigLocation;
-var sunshineRootFolder = Path.GetDirectoryName(sunshineAppsJson);
+    gameDirs.AddRange(addlDirectories);
+    exeExclusionWords.AddRange(addlExeExclusionWords);
+    var sunshineAppsJson = sunshineConfigLocation;
+    var sunshineRootFolder = Path.GetDirectoryName(sunshineAppsJson);
 
-if (!File.Exists(sunshineAppsJson))
-{
-    Logger.Log($"Could not find Sunshine Apps config at specified path: {sunshineAppsJson}", LogLevel.Error);
-    return;
-}
-var sunshineAppInstance = JsonConvert.DeserializeObject<SunshineConfig>(File.ReadAllText(sunshineAppsJson));
-var gamesAdded = 0;
-var gamesRemoved = 0;
-
-if (removeUninstalled)
-{
-    for (int i = sunshineAppInstance.apps.Count() - 1; i >= 0; i--) //keep tolist so we can remove elements while iterating on the "copy"
+    if (!File.Exists(sunshineAppsJson))
     {
-        var existingApp = sunshineAppInstance.apps[i];
-        if (existingApp != null)
-        {
-            var exeStillExists = existingApp.cmd == null && existingApp.detached == null ||
-                                 existingApp.cmd != null && File.Exists(existingApp.cmd) ||
-                                 existingApp.detached != null && existingApp.detached.Any(detachedCommand =>
-                                 {
-                                     return detachedCommand == null ||
-                                      !detachedCommand.Contains("exe") ||
-                                      detachedCommand != null && detachedCommand.EndsWith("exe") && File.Exists(detachedCommand);
-                                 });
-            if (!exeStillExists)
-            {
-                Logger.Log($"{existingApp.name} no longer has an exe, removing from apps config...");
-                sunshineAppInstance.apps.RemoveAt(i);
-                gamesRemoved++;
-            }
-        }
-    }
-}
-
-if (sunshineAppInstance == null)
-{
-    Logger.Log($"Sunshite app list is null", LogLevel.Error);
-    return;
-}
-
-void ScanFolder(string folder)
-{
-    Logger.Log($"Scanning for games in {folder}...");
-    var di = new DirectoryInfo(folder);
-    if (!di.Exists)
-    {
-        Logger.Log($"Directory for platform {di.Name} does not exist, skipping...", LogLevel.Warning);
+        Logger.Log($"Could not find Sunshine Apps config at specified path: {sunshineAppsJson}", LogLevel.Error);
         return;
     }
-    foreach (var gameDir in di.GetDirectories())
+    var sunshineAppInstance = JsonConvert.DeserializeObject<SunshineConfig>(File.ReadAllText(sunshineAppsJson));
+    var gamesAdded = 0;
+    var gamesRemoved = 0;
+
+    if (removeUninstalled)
     {
-        Logger.Log($"Looking for game exe in {gameDir}...");
-        var gameName = gameDir.Name;
-        if (exclusionWords.Any(ew => gameName.Contains(ew)))
+        for (int i = sunshineAppInstance.apps.Count() - 1; i >= 0; i--) //keep tolist so we can remove elements while iterating on the "copy"
         {
-            Logger.Log($"Skipping {gameName} as it was an excluded word match...");
-            continue;
-        }
-        var exe = Directory.GetFiles(gameDir.FullName, "*.exe", SearchOption.AllDirectories)
-        .OrderBy(f => new FileInfo(f).Length)
-        .FirstOrDefault(exefile =>
-        {
-            var exeName = new FileInfo(exefile).Name.ToLower();
-            return exeName == gameName.ToLower() || !exeExclusionWords.Any(ew => exeName.Contains(ew.ToLower()));
-        });
-        if (string.IsNullOrEmpty(exe))
-        {
-            Logger.Log($"EXE could not be found for game '{gameName}'", LogLevel.Warning);
-            continue;
-        }
-
-        var existingApp = sunshineAppInstance.apps.FirstOrDefault(g => g.cmd == exe || g.name == gameName);
-        if (forceUpdate || existingApp == null)
-        {
-            if (exe.Contains("gamelaunchhelper.exe"))
+            var existingApp = sunshineAppInstance.apps[i];
+            if (existingApp != null)
             {
-                //xbox game pass game
-                existingApp = new SunshineApp()
+                var exeStillExists = existingApp.cmd == null && existingApp.detached == null ||
+                                     existingApp.cmd != null && File.Exists(existingApp.cmd) ||
+                                     existingApp.detached != null && existingApp.detached.Any(detachedCommand =>
+                                     {
+                                         return detachedCommand == null ||
+                                          !detachedCommand.Contains("exe") ||
+                                          detachedCommand != null && detachedCommand.EndsWith("exe") && File.Exists(detachedCommand);
+                                     });
+                if (!exeStillExists)
                 {
-                    name = gameName,
-                    detached = new List<string>()
-                    {
-                        exe
-                    },
-                    workingdir = ""
-                };
-            }
-            else
-            {
-                existingApp = new SunshineApp()
-                {
-                    name = gameName,
-                    cmd = exe,
-                    workingdir = ""
-                };
-            }
-            string coversFolderPath = sunshineRootFolder + "/covers/";
-            string fullPathOfCoverImage = ImageScraper.SaveIGDBImageToCoversFolder(gameName, coversFolderPath).Result;
-            if (!string.IsNullOrEmpty(fullPathOfCoverImage))
-            {
-                existingApp.imagepath = fullPathOfCoverImage;
-            }
-            else
-            {
-                Logger.Log("Failed to find cover image for " + gameName, LogLevel.Warning);
-            }
-            gamesAdded++;
-            Logger.Log($"Adding new game to Sunshine apps: {gameName} - {exe}");
-            sunshineAppInstance.apps.Add(existingApp);
-        }
-        else
-        {
-            Logger.Log($"Found existing Sunshine app for {gameName} already!: " + (existingApp.cmd ?? existingApp.detached.FirstOrDefault() ?? existingApp.name).Trim());
-        }
-    }
-    Console.WriteLine(""); //blank line to separate platforms
-}
-
-string windowsPathConvert(string path)
-{
-    string temp = string.Concat("*", $@"{path.AsSpan(1)}") + @"\steamapps\common";
-    string gooderPath = temp.Replace('/', Path.DirectorySeparatorChar);
-
-    return gooderPath;
-}
-
-void RegistrySearch()
-{
-    foreach (var path in registryDir)
-    {
-        if (path.ToLower().Contains("steam"))
-        {
-            RegistryKey? steamRegistry = Registry.LocalMachine.OpenSubKey(path);
-            if (steamRegistry.GetValue("SteamPath") != null)
-            {
-                string temp = steamRegistry.GetValue("SteamPath").ToString();
-                temp = windowsPathConvert(temp);
-                gameDirs.Add(temp);
-            }
-            else
-            {
-                steamRegistry = Registry.CurrentUser.OpenSubKey(path);
-                if (steamRegistry.GetValue("SteamPath") != null)
-                {
-                    string temp = steamRegistry.GetValue("SteamPath").ToString();
-                    temp = windowsPathConvert(temp);
-                    gameDirs.Add(temp);
+                    Logger.Log($"{existingApp.name} no longer has an exe, removing from apps config...");
+                    sunshineAppInstance.apps.RemoveAt(i);
+                    gamesRemoved++;
                 }
             }
         }
     }
-}
 
-var logicalDrives = DriveInfo.GetDrives();
-var wildcatDriveLetter = new Regex(Regex.Escape(wildcatDrive));
-
-if (OperatingSystem.IsWindows())
-{
-    gameDirs = new List<string>
-        {
-            @"*:\Program Files (x86)\Steam\steamapps\common",
-            @"*:\XboxGames",
-            @"*:\Program Files\EA Games",
-            @"*:\Program Files\Epic Games\",
-            @"*:\Program Files (x86)\Ubisoft\Ubisoft Game Launcher\games"
-        };
-
-    bool isSteamLibraryFound = false;
-    foreach (var drive in logicalDrives)
+    if (sunshineAppInstance == null)
     {
-        var libraryFoldersPath = drive.Name + steamLibraryFolders;
-        var file = new FileInfo(libraryFoldersPath);
-        if (!file.Exists)
-        {
-            Logger.Log($"libraryfolders.vdf not found on {file.DirectoryName}, skipping...", LogLevel.Warning);
-            continue;
-        }
-        var libraries = VdfConvert.Deserialize(File.ReadAllText(libraryFoldersPath));
-        foreach (var library in libraries.Value)
-        {
-            if (library is not VProperty libProp)
-                continue;
+        Logger.Log($"Sunshite app list is null", LogLevel.Error);
+        return;
+    }
 
-            gameDirs.Add($@"{libProp.Value.Value<string>("path")}\steamapps\common");
-            isSteamLibraryFound = true;
+    void ScanFolder(string folder)
+    {
+        Logger.Log($"Scanning for games in {folder}...");
+        var di = new DirectoryInfo(folder);
+        if (!di.Exists)
+        {
+            Logger.Log($"Directory for platform {di.Name} does not exist, skipping...", LogLevel.Warning);
+            return;
+        }
+        foreach (var gameDir in di.GetDirectories())
+        {
+            Logger.Log($"Looking for game exe in {gameDir}...");
+            var gameName = gameDir.Name;
+            if (exclusionWords.Any(ew => gameName.Contains(ew)))
+            {
+                Logger.Log($"Skipping {gameName} as it was an excluded word match...");
+                continue;
+            }
+            var exe = Directory.GetFiles(gameDir.FullName, "*.exe", SearchOption.AllDirectories)
+            .OrderBy(f => new FileInfo(f).Length)
+            .FirstOrDefault(exefile =>
+            {
+                var exeName = new FileInfo(exefile).Name.ToLower();
+                return exeName == gameName.ToLower() || !exeExclusionWords.Any(ew => exeName.Contains(ew.ToLower()));
+            });
+            if (string.IsNullOrEmpty(exe))
+            {
+                Logger.Log($"EXE could not be found for game '{gameName}'", LogLevel.Warning);
+                continue;
+            }
+
+            var existingApp = sunshineAppInstance.apps.FirstOrDefault(g => g.cmd == exe || g.name == gameName);
+            if (forceUpdate || existingApp == null)
+            {
+                if (exe.Contains("gamelaunchhelper.exe"))
+                {
+                    //xbox game pass game
+                    existingApp = new SunshineApp()
+                    {
+                        name = gameName,
+                        detached = new List<string>()
+                        {
+                            exe
+                        },
+                        workingdir = ""
+                    };
+                }
+                else
+                {
+                    existingApp = new SunshineApp()
+                    {
+                        name = gameName,
+                        cmd = exe,
+                        workingdir = ""
+                    };
+                }
+                string coversFolderPath = sunshineRootFolder + "/covers/";
+                string fullPathOfCoverImage = ImageScraper.SaveIGDBImageToCoversFolder(gameName, coversFolderPath).Result;
+                if (!string.IsNullOrEmpty(fullPathOfCoverImage))
+                {
+                    existingApp.imagepath = fullPathOfCoverImage;
+                }
+                else
+                {
+                    Logger.Log("Failed to find cover image for " + gameName, LogLevel.Warning);
+                }
+                gamesAdded++;
+                Logger.Log($"Adding new game to Sunshine apps: {gameName} - {exe}");
+                sunshineAppInstance.apps.Add(existingApp);
+            }
+            else
+            {
+                Logger.Log($"Found existing Sunshine app for {gameName} already!: " + (existingApp.cmd ?? existingApp.detached.FirstOrDefault() ?? existingApp.name).Trim());
             }
         }
+        Console.WriteLine(""); //blank line to separate platforms
+    }
+
+    string WindowsPathConvert(string path)
+    {
+        string temp = string.Concat("*", $@"{path.AsSpan(1)}") + @"\steamapps\common";
+        string windowsPath = temp.Replace('/', Path.DirectorySeparatorChar);
+
+        return windowsPath;
+    }
+
+    void RegistrySearch()
+    {
+        foreach (var path in registryDir)
+        {
+            if (path.ToLower().Contains("steam"))
+            {
+                RegistryKey? steamRegistry = Registry.LocalMachine.OpenSubKey(path);
+                if (steamRegistry.GetValue("SteamPath") != null)
+                {
+                    string temp = steamRegistry.GetValue("SteamPath").ToString();
+                    temp = WindowsPathConvert(temp);
+                    gameDirs.Add(temp);
+                }
+                else
+                {
+                    steamRegistry = Registry.CurrentUser.OpenSubKey(path);
+                    if (steamRegistry.GetValue("SteamPath") != null)
+                    {
+                        string temp = steamRegistry.GetValue("SteamPath").ToString();
+                        temp = WindowsPathConvert(temp);
+                        gameDirs.Add(temp);
+                    }
+                }
+            }
+        }
+    }
+
+    var logicalDrives = DriveInfo.GetDrives();
+    var wildcatDriveLetter = new Regex(Regex.Escape(wildcatDrive));
+
+    if (OperatingSystem.IsWindows())
+    {
+        gameDirs = new List<string>
+            {
+                @"*:\Program Files (x86)\Steam\steamapps\common",
+                @"*:\XboxGames",
+                @"*:\Program Files\EA Games",
+                @"*:\Program Files\Epic Games\",
+                @"*:\Program Files (x86)\Ubisoft\Ubisoft Game Launcher\games"
+            };
+
+        bool isSteamLibraryFound = false;
+
+        //Search .vdf file for other directories where games might be installed; add to gameDir
+        foreach (var drive in logicalDrives)
+        {
+            var libraryFoldersPath = drive.Name + steamLibraryFolders;
+            var file = new FileInfo(libraryFoldersPath);
+            if (!file.Exists)
+            {
+                Logger.Log($"libraryfolders.vdf not found on {file.DirectoryName}, skipping...", LogLevel.Warning);
+                continue;
+            }
+            var libraries = VdfConvert.Deserialize(File.ReadAllText(libraryFoldersPath));
+            foreach (var library in libraries.Value)
+            {
+                if (library is not VProperty libProp)
+                    continue;
+
+                gameDirs.Add($@"{libProp.Value.Value<string>("path")}\steamapps\common");
+                isSteamLibraryFound = true;
+                }
+            }
+        //Search registry if no other directories found from libraryfolder.vdf
         if (!isSteamLibraryFound)
         {
             var registryDir = new List<string>()
@@ -272,6 +275,7 @@ if (OperatingSystem.IsWindows())
                 @"/.local/share/Steam/steamapps/compatdata"
             };
 
+            //Search .vdf file for other directories where games might be installed; add to gameDir
             var libraryFoldersPath = userInfo + @"/.local/share/Steam/steamapps/libraryfolders";
             var file = new FileInfo(libraryFoldersPath);
             if (!file.Exists)
@@ -303,6 +307,8 @@ if (OperatingSystem.IsWindows())
             {
                 @"/Library/Application Support/Steam/SteamApps/common"
             };
+
+            //Search .vdf file for other directories where games might be installed; add to gameDir
             var libraryFoldersPath = userInfo + @"/Library/Application Support/Steam/SteamApps/libraryfolders";
             var file = new FileInfo(libraryFoldersPath);
             if (!file.Exists)
