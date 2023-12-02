@@ -1,6 +1,7 @@
 // See https://aka.ms/new-console-template for more information
 using Gameloop.Vdf;
 using Gameloop.Vdf.Linq;
+using Microsoft.Win32;
 using Newtonsoft.Json;
 using SunshineGameFinder;
 using System.CommandLine;
@@ -11,7 +12,9 @@ const string wildcatDrive = @"*:\";
 const string steamLibraryFolders = @"Program Files (x86)\Steam\steamapps\libraryfolders.vdf";
 
 // default values
-var gameDirs = new List<string>() { @"*:\Program Files (x86)\Steam\steamapps\common", @"*:\XboxGames", @"*:\Program Files\EA Games", @"*:\Program Files\Epic Games\", @"*:\Program Files (x86)\Ubisoft\Ubisoft Game Launcher\games" };
+var gameDirs = new List<string>();
+var registryDir = new List<string>();
+
 var exclusionWords = new List<string>() { "Steam" };
 var exeExclusionWords = new List<string>() { "Steam", "Cleanup", "DX", "Uninstall", "Touchup", "redist", "Crash", "Editor" };
 
@@ -75,8 +78,8 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
             var existingApp = sunshineAppInstance.apps[i];
             if (existingApp != null)
             {
-                var exeStillExists = existingApp.cmd == null && existingApp.detached == null || 
-                                     existingApp.cmd != null && File.Exists(existingApp.cmd) || 
+                var exeStillExists = existingApp.cmd == null && existingApp.detached == null ||
+                                     existingApp.cmd != null && File.Exists(existingApp.cmd) ||
                                      existingApp.detached != null && existingApp.detached.Any(detachedCommand =>
                                      {
                                          return detachedCommand == null ||
@@ -117,7 +120,10 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
                 Logger.Log($"Skipping {gameName} as it was an excluded word match...");
                 continue;
             }
-            var exe = Directory.GetFiles(gameDir.FullName, "*.exe", SearchOption.AllDirectories).FirstOrDefault(exefile => {
+            var exe = Directory.GetFiles(gameDir.FullName, "*.exe", SearchOption.AllDirectories)
+            .OrderBy(f => new FileInfo(f).Length)
+            .FirstOrDefault(exefile =>
+            {
                 var exeName = new FileInfo(exefile).Name.ToLower();
                 return exeName == gameName.ToLower() || !exeExclusionWords.Any(ew => exeName.Contains(ew.ToLower()));
             });
@@ -137,9 +143,9 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
                     {
                         name = gameName,
                         detached = new List<string>()
-                    {
-                        exe
-                    },
+                        {
+                            exe
+                        },
                         workingdir = ""
                     };
                 }
@@ -174,25 +180,157 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
         Console.WriteLine(""); //blank line to separate platforms
     }
 
+    string WindowsPathConvert(string path)
+    {
+        string temp = string.Concat("*", $@"{path.AsSpan(1)}") + @"\steamapps\common";
+        string windowsPath = temp.Replace('/', Path.DirectorySeparatorChar);
+
+        return windowsPath;
+    }
+
+    void RegistrySearch()
+    {
+        foreach (var path in registryDir)
+        {
+            if (path.ToLower().Contains("steam"))
+            {
+                RegistryKey? steamRegistry = Registry.LocalMachine.OpenSubKey(path);
+                if (steamRegistry.GetValue("SteamPath") != null)
+                {
+                    string temp = steamRegistry.GetValue("SteamPath").ToString();
+                    temp = WindowsPathConvert(temp);
+                    gameDirs.Add(temp);
+                }
+                else
+                {
+                    steamRegistry = Registry.CurrentUser.OpenSubKey(path);
+                    if (steamRegistry.GetValue("SteamPath") != null)
+                    {
+                        string temp = steamRegistry.GetValue("SteamPath").ToString();
+                        temp = WindowsPathConvert(temp);
+                        gameDirs.Add(temp);
+                    }
+                }
+            }
+        }
+    }
+
     var logicalDrives = DriveInfo.GetDrives();
     var wildcatDriveLetter = new Regex(Regex.Escape(wildcatDrive));
 
-    foreach (var drive in logicalDrives)
+    if (OperatingSystem.IsWindows())
     {
-        var libraryFoldersPath = drive.Name + steamLibraryFolders;
-        var file = new FileInfo(libraryFoldersPath);
-        if (!file.Exists)
-        {
-            Logger.Log($"libraryfolders.vdf not found on {file.DirectoryName}, skipping...", LogLevel.Warning);
-            continue;
-        }
-        var libraries = VdfConvert.Deserialize(File.ReadAllText(libraryFoldersPath));
-        foreach(var library in libraries.Value)
-        {
-            if (library is not VProperty libProp)
-                continue;
+        gameDirs = new List<string>
+            {
+                @"*:\Program Files (x86)\Steam\steamapps\common",
+                @"*:\XboxGames",
+                @"*:\Program Files\EA Games",
+                @"*:\Program Files\Epic Games\",
+                @"*:\Program Files (x86)\Ubisoft\Ubisoft Game Launcher\games"
+            };
 
-            gameDirs.Add($@"{libProp.Value.Value<string>("path")}\steamapps\common");
+        bool isSteamLibraryFound = false;
+
+        //Search .vdf file for other directories where games might be installed; add to gameDir
+        foreach (var drive in logicalDrives)
+        {
+            var libraryFoldersPath = drive.Name + steamLibraryFolders;
+            var file = new FileInfo(libraryFoldersPath);
+            if (!file.Exists)
+            {
+                Logger.Log($"libraryfolders.vdf not found on {file.DirectoryName}, skipping...", LogLevel.Warning);
+                continue;
+            }
+            var libraries = VdfConvert.Deserialize(File.ReadAllText(libraryFoldersPath));
+            foreach (var library in libraries.Value)
+            {
+                if (library is not VProperty libProp)
+                    continue;
+
+                gameDirs.Add($@"{libProp.Value.Value<string>("path")}\steamapps\common");
+                isSteamLibraryFound = true;
+                }
+            }
+        //Search registry if no other directories found from libraryfolder.vdf
+        if (!isSteamLibraryFound)
+        {
+            var registryDir = new List<string>()
+            {
+                @"SOFTWARE\Wow6432Node\Valve\Steam",
+                @"SOFTWARE\Valve\Steam"
+            };
+            RegistrySearch();
+        }
+    }
+    else
+    {
+        string userInfo = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (OperatingSystem.IsLinux())
+        {
+            var linuxPaths = new List<string>()
+            {
+                @"/.local/share/Steam/SteamApps/common",
+                @"/.local/share/Steam/steamapps/common",
+                @"/.local/share/Steam/SteamApps/compatdata",
+                @"/.local/share/Steam/steamapps/compatdata"
+            };
+
+            //Search .vdf file for other directories where games might be installed; add to gameDir
+            var libraryFoldersPath = userInfo + @"/.local/share/Steam/steamapps/libraryfolders";
+            var file = new FileInfo(libraryFoldersPath);
+            if (!file.Exists)
+            {
+                Logger.Log($"libraryfolders.vdf not found on {file.DirectoryName}, skipping...", LogLevel.Warning);
+            }
+            var libraries = VdfConvert.Deserialize(File.ReadAllText(libraryFoldersPath));
+            foreach (var library in libraries.Value)
+            {
+                if (library is not VProperty libProp)
+                    continue;
+
+                gameDirs.Add($@"{libProp.Value.Value<string>("path")}/steamapps/common");
+            }
+            foreach (var path in linuxPaths)
+            {
+                string linuxInstallPath = string.Concat(userInfo, path);
+                if (Directory.Exists(linuxInstallPath))
+                {
+                    gameDirs.Add(linuxInstallPath);
+                }
+            }
+
+
+        }
+        else if (OperatingSystem.IsMacOS())
+        {
+            var macOSPaths = new List<string>()
+            {
+                @"/Library/Application Support/Steam/SteamApps/common"
+            };
+
+            //Search .vdf file for other directories where games might be installed; add to gameDir
+            var libraryFoldersPath = userInfo + @"/Library/Application Support/Steam/SteamApps/libraryfolders";
+            var file = new FileInfo(libraryFoldersPath);
+            if (!file.Exists)
+            {
+                Logger.Log($"libraryfolders.vdf not found on {file.DirectoryName}, skipping...", LogLevel.Warning);
+            }
+            var libraries = VdfConvert.Deserialize(File.ReadAllText(libraryFoldersPath));
+            foreach (var library in libraries.Value)
+            {
+                if (library is not VProperty libProp)
+                    continue;
+
+                gameDirs.Add($@"{libProp.Value.Value<string>("path")}/steamapps/common");
+            }
+            foreach (var path in macOSPaths)
+            {
+                string macInstallPath = string.Concat(userInfo, path);
+                if (Directory.Exists(macInstallPath))
+                {
+                    gameDirs.Add(macInstallPath);
+                }
+            }
         }
     }
 
