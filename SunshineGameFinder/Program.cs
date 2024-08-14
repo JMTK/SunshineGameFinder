@@ -111,7 +111,7 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
         foreach (var gameDir in di.GetDirectories())
         {
             Logger.Log($"Looking for game exe in {gameDir}...");
-            var gameName = gameDir.Name;
+            var gameName = CleanGameName(gameDir.Name);
             if (exclusionWords.Any(ew => gameName.Contains(ew)))
             {
                 Logger.Log($"Skipping {gameName} as it was an excluded word match...");
@@ -152,7 +152,7 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
                         workingdir = ""
                     };
                 }
-                string coversFolderPath = sunshineRootFolder + "/covers/";
+                string coversFolderPath = Path.GetFullPath(sunshineRootFolder.Replace("\\", "/") + "/covers/");
                 string fullPathOfCoverImage = ImageScraper.SaveIGDBImageToCoversFolder(gameName, coversFolderPath).Result;
                 if (!string.IsNullOrEmpty(fullPathOfCoverImage))
                 {
@@ -222,4 +222,15 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
     }
 
 }, addlDirectoriesOption, addlExeExclusionWords, sunshineConfigLocationOption, forceOption, removeUninstalledOption);
+
+string CleanGameName(string name)
+{
+    string[] toReplace = new string[] { "Win10", "Windows 10", "Win11", "Windows 11" };
+    foreach (string toRemove in toReplace)
+    {
+        name = name.Replace(toRemove, "");
+    }
+    return name.Trim();
+}
+
 rootCommand.Invoke(args);
