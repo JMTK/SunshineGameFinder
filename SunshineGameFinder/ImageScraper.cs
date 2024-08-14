@@ -1,10 +1,4 @@
 ﻿using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace SunshineGameFinder
 {
@@ -154,10 +148,11 @@ namespace SunshineGameFinder
                 int gameId = await GetIDForGame(gameName);
                 var rawJson = await (await HttpClient.GetAsync(gameTemplate.Replace("@ID", gameId.ToString()))).Content.ReadAsStringAsync();
                 var game = JsonConvert.DeserializeObject<Game>(rawJson);
+                if (game == null) return null;
                 var coverUrl = game.cover.url;
                 var stream = await (await HttpClient.GetAsync("https:" + coverUrl.Replace("thumb", "cover_big"))).Content.ReadAsStreamAsync();
 
-                string fullpath = coversFolderPath + gameId.ToString() + ".jpg";
+                string fullpath = coversFolderPath + gameId.ToString() + ".png";
                 using FileStream fs = new(fullpath, FileMode.OpenOrCreate);
                 stream.Position = 0;
                 await stream.CopyToAsync(fs);

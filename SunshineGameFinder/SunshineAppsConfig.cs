@@ -19,6 +19,17 @@ namespace SunshineGameFinder
 
         [JsonProperty("working-dir")]
         public string workingdir { get; set; }
+
+        [JsonProperty("exclude-global-prep-cmd")]
+        public bool excludeglobalprepcmd { get; set; }
+        public bool elevated { get; set; }
+        [JsonProperty("auto-detach")]
+        public bool autodetach { get; set; }
+        [JsonProperty("wait-all")]
+        public bool waitall { get; set; }
+
+        [JsonProperty("exit-timeout")]
+        public int exittimeout { get; set; } = 5;
     }
 
     public class Env
