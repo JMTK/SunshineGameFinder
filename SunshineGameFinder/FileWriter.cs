@@ -1,4 +1,4 @@
-﻿using Newtonsoft.Json;
+﻿using System.Text.Json;
 
 namespace SunshineGameFinder
 {
@@ -22,7 +22,7 @@ namespace SunshineGameFinder
                 string backUpFilePath = Path.Combine(folderPath, $"{Path.GetFileNameWithoutExtension(filePath)}_{DateTime.Now.ToString("MMddyyyy_HHmmss")}.{backupFileExtension}");
                 File.Move(filePath, backUpFilePath);
 
-                File.WriteAllText(filePath, JsonConvert.SerializeObject(config, Newtonsoft.Json.Formatting.Indented, new JsonSerializerSettings() { NullValueHandling = NullValueHandling.Ignore }));
+                File.WriteAllText(filePath, JsonSerializer.Serialize<SunshineConfig>(config, SourceGenerationContext.Default.SunshineConfig));
             }
             catch (Exception e)
             {

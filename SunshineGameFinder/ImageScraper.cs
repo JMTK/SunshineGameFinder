@@ -1,4 +1,4 @@
-﻿using Newtonsoft.Json;
+﻿using System.Text.Json;
 
 namespace SunshineGameFinder
 {
@@ -127,7 +127,7 @@ namespace SunshineGameFinder
         private static async Task<int> GetIDForGame(string gameName)
         {
             var rawJson = await (await HttpClient.GetAsync(bucketTemplate.Replace("@FIRSTTWOLETTERS", string.Join("", gameName.Take(2)).ToLower()))).Content.ReadAsStringAsync();
-            var dict = JsonConvert.DeserializeObject<Dictionary<int, GamesForBucket>>(rawJson);
+            var dict = JsonSerializer.Deserialize<Dictionary<int, GamesForBucket>>(rawJson);
             KeyValuePair<int, GamesForBucket>? FindGameFuzzy(double percentage)
             {
                 return dict.FirstOrDefault(kvp => CalculateSimilarity(kvp.Value.name.ToLower(), gameName.ToLower()) > (percentage / 100));
@@ -147,7 +147,7 @@ namespace SunshineGameFinder
             {
                 int gameId = await GetIDForGame(gameName);
                 var rawJson = await (await HttpClient.GetAsync(gameTemplate.Replace("@ID", gameId.ToString()))).Content.ReadAsStringAsync();
-                var game = JsonConvert.DeserializeObject<Game>(rawJson);
+                var game = JsonSerializer.Deserialize<Game>(rawJson);
                 if (game == null) return null;
                 var coverUrl = game.cover.url;
                 var stream = await (await HttpClient.GetAsync("https:" + coverUrl.Replace("thumb", "cover_big"))).Content.ReadAsStreamAsync();
