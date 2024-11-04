@@ -42,6 +42,7 @@
                 Console.Write(message);
             }
 
+            Console.ForegroundColor = ConsoleColor.White;
         }
     }
 

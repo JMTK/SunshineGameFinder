@@ -1,7 +1,7 @@
 // See https://aka.ms/new-console-template for more information
 using Gameloop.Vdf;
 using Gameloop.Vdf.Linq;
-using Newtonsoft.Json;
+using System.Text.Json;
 using SunshineGameFinder;
 using System.CommandLine;
 using System.Text.RegularExpressions;
@@ -65,10 +65,8 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
         Logger.Log($"Could not find Sunshine Apps config at specified path: {sunshineAppsJson}", LogLevel.Error);
         return;
     }
-    var sunshineAppInstance = JsonConvert.DeserializeObject<SunshineConfig>(File.ReadAllText(sunshineAppsJson), new JsonSerializerSettings()
-    {
-        ConstructorHandling = ConstructorHandling.AllowNonPublicDefaultConstructor
-    });
+    var sunshineAppInstance = JsonSerializer.Deserialize<SunshineConfig>(File.ReadAllText(sunshineAppsJson), SourceGenerationContext.Default.SunshineConfig);
+
     var gamesAdded = 0;
     var gamesRemoved = 0;
 
