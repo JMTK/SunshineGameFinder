@@ -13,7 +13,7 @@ const string steamLibraryFolders = @"Program Files (x86)\Steam\steamapps\library
 // default values
 var gameDirs = new List<string>() { @"*:\Program Files (x86)\Steam\steamapps\common", @"*:\XboxGames", @"*:\Program Files\EA Games", @"*:\Program Files\Epic Games\", @"*:\Program Files (x86)\Ubisoft\Ubisoft Game Launcher\games" };
 var exclusionWords = new List<string>() { "Steam" };
-var exeExclusionWords = new List<string>() { "Steam", "Cleanup", "DX", "Uninstall", "Touchup", "redist", "Crash", "Editor" };
+var exeExclusionWords = new List<string>() { "Steam", "Cleanup", "DX", "Uninstall", "Touchup", "redist", "Crash", "Editor", "crs-handler" };
 
 // command setup
 RootCommand rootCommand = new RootCommand("Searches your computer for various common game install paths for the Sunshine application. After running it, all games that did not already exist will be added to the apps.json, meaning your Moonlight client should see them next time it is started.");
@@ -46,7 +46,8 @@ removeUninstalledOption.SetDefaultValue(false);
 rootCommand.AddOption(removeUninstalledOption);
 
 Logger.Log($@"
-Thanks for using the Sunshine Game Finder! 
+Thanks for using the Sunshine Game Finder! App Version: {System.Reflection.Assembly.GetExecutingAssembly().GetName().Version} - Runtime: {System.Environment.Version}
+
 Searches your computer for various common game install paths for the Sunshine application. After running it, all games that did not already exist will be added to the apps.json, meaning your Moonlight client should see them next time it is started.
 
 Have an issue or an idea? Come contribute at https://github.com/JMTK/SunshineGameFinder
@@ -64,7 +65,10 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
         Logger.Log($"Could not find Sunshine Apps config at specified path: {sunshineAppsJson}", LogLevel.Error);
         return;
     }
-    var sunshineAppInstance = JsonConvert.DeserializeObject<SunshineConfig>(File.ReadAllText(sunshineAppsJson));
+    var sunshineAppInstance = JsonConvert.DeserializeObject<SunshineConfig>(File.ReadAllText(sunshineAppsJson), new JsonSerializerSettings()
+    {
+        ConstructorHandling = ConstructorHandling.AllowNonPublicDefaultConstructor
+    });
     var gamesAdded = 0;
     var gamesRemoved = 0;
 
@@ -95,7 +99,7 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
 
     if (sunshineAppInstance == null)
     {
-        Logger.Log($"Sunshite app list is null", LogLevel.Error);
+        Logger.Log($"Sunshine app list is null", LogLevel.Error);
         return;
     }
 
@@ -110,11 +114,11 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
         }
         foreach (var gameDir in di.GetDirectories())
         {
-            Logger.Log($"Looking for game exe in {gameDir}...");
+            Logger.Log($"\tLooking in {gameDir.FullName.Replace(folder, "")}...", false);
             var gameName = CleanGameName(gameDir.Name);
             if (exclusionWords.Any(ew => gameName.Contains(ew)))
             {
-                Logger.Log($"Skipping {gameName} as it was an excluded word match...");
+                Logger.Log($"Skipping due to excluded word match", LogLevel.Trace);
                 continue;
             }
             var exe = Directory.GetFiles(gameDir.FullName, "*.exe", SearchOption.AllDirectories).FirstOrDefault(exefile => {
@@ -123,7 +127,7 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
             });
             if (string.IsNullOrEmpty(exe))
             {
-                Logger.Log($"EXE could not be found for game '{gameName}'", LogLevel.Warning);
+                Logger.Log($"EXE not be found", LogLevel.Warning);
                 continue;
             }
 
@@ -163,7 +167,7 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
                     Logger.Log("Failed to find cover image for " + gameName, LogLevel.Warning);
                 }
                 gamesAdded++;
-                Logger.Log($"Adding new game to Sunshine apps: {gameName} - {exe}");
+                Logger.Log($"Adding new game to Sunshine apps: {gameName} - {exe}", LogLevel.Success);
                 sunshineAppInstance.apps.Add(existingApp);
             }
             else
