@@ -39,6 +39,16 @@ namespace SunshineGameFinder
 
     public class SunshineConfig
     {
+        public SunshineConfig()
+        {
+
+        }
+        public SunshineConfig(Env env, List<SunshineApp> apps)
+        {
+            this.env = env;
+            this.apps = apps;
+        }
+
         public Env env { get; set; }
         public List<SunshineApp> apps { get; set; }
     }

@@ -7,7 +7,12 @@
             Log(message, LogLevel.Information);
         }
 
-        public static void Log(string message, LogLevel level)
+        public static void Log(string message, bool newline)
+        {
+            Log(message, LogLevel.Information, newline);
+        }
+
+        public static void Log(string message, LogLevel level, bool newline = true)
         {
             switch (level)
             {
@@ -20,13 +25,23 @@
                 case LogLevel.Success:
                     Console.ForegroundColor = ConsoleColor.Green;
                     break;
+                case LogLevel.Trace:
+                    Console.ForegroundColor = ConsoleColor.Gray;
+                    break;
                 default:
                     Console.ForegroundColor = ConsoleColor.White;
                     break;
             }
 
-            Console.WriteLine(message);
-            
+            if (newline)
+            {
+                Console.WriteLine(message);
+            }
+            else
+            {
+                Console.Write(message);
+            }
+
         }
     }
 
@@ -35,7 +50,8 @@
         Error,
         Warning,
         Information,
-        Success
+        Success,
+        Trace
     }
 
 }
