@@ -19,7 +19,7 @@ namespace SunshineGameFinder
 
         [JsonPropertyName("image-path")]
         public string imagepath { get; set; }
-        public List<string> detached { get; set; }
+        public List<string>? detached { get; set; }
         public string output { get; set; }
         public string cmd { get; set; }
 
@@ -40,6 +40,6 @@ namespace SunshineGameFinder
 
     public class SunshineConfig
     {
-        public List<SunshineApp> apps { get; set; }
+        public List<SunshineApp>? apps { get; set; }
     }
 }
