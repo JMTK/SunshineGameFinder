@@ -46,6 +46,19 @@ removeUninstalledOption.AddAlias("-ru");
 removeUninstalledOption.SetDefaultValue(false);
 rootCommand.AddOption(removeUninstalledOption);
 
+var ensureDesktopAppOption = new Option<bool>("--ensure-desktop-app", "Ensures that the 'Desktop' app is there");
+ensureDesktopAppOption.AllowMultipleArgumentsPerToken = false;
+ensureDesktopAppOption.AddAlias("-desktop");
+ensureDesktopAppOption.SetDefaultValue(false);
+rootCommand.AddOption(ensureDesktopAppOption);
+
+var ensureSteamBigPictureOption = new Option<bool>("--ensure-steam-big-picture", "Ensures that the 'Steam Big Picture' app is there");
+ensureSteamBigPictureOption.AllowMultipleArgumentsPerToken = false;
+ensureSteamBigPictureOption.AddAlias("-bigpicture");
+ensureSteamBigPictureOption.SetDefaultValue(false);
+rootCommand.AddOption(ensureSteamBigPictureOption);
+
+
 Logger.Log($@"
 Thanks for using the Sunshine Game Finder! App Version: {System.Reflection.Assembly.GetExecutingAssembly().GetName().Version} - Runtime: {System.Environment.Version}
 
@@ -54,7 +67,7 @@ Searches your computer for various common game install paths for the Sunshine ap
 Have an issue or an idea? Come contribute at https://github.com/JMTK/SunshineGameFinder
 ");
 // options handler
-rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLocation, forceUpdate, removeUninstalled) =>
+rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLocation, forceUpdate, removeUninstalled, ensureDesktop, ensureSteamBigPicture) =>
 {
     foreach (var dir in addlDirectories)
     {
@@ -88,9 +101,9 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
             var existingApp = sunshineAppInstance.apps[i];
             if (existingApp != null)
             {
-                var exeStillExists = existingApp.cmd == null && existingApp.detached == null || 
-                                     existingApp.cmd != null && File.Exists(existingApp.cmd) || 
-                                     existingApp.detached != null && existingApp.detached.Any(detachedCommand =>
+                var exeStillExists = existingApp.Cmd == null && existingApp.Detached == null ||
+                                     existingApp.Cmd != null && File.Exists(existingApp.Cmd) ||
+                                     existingApp.Detached != null && existingApp.Detached.Any(detachedCommand =>
                                      {
                                          return detachedCommand == null ||
                                           !detachedCommand.Contains("exe") ||
@@ -98,7 +111,7 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
                                      });
                 if (!exeStillExists)
                 {
-                    Logger.Log($"{existingApp.name} no longer has an exe, removing from apps config...");
+                    Logger.Log($"{existingApp.Name} no longer has an exe, removing from apps config...");
                     sunshineAppInstance.apps.RemoveAt(i);
                     gamesRemoved++;
                 }
@@ -143,7 +156,7 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
                 var exe = Directory.GetFiles(gameDir.FullName, "*.exe", SearchOption.AllDirectories).FirstOrDefault(exefile =>
                 {
                     var exeName = new FileInfo(exefile).Name.ToLower();
-                    return exeName == gameName.ToLower() || !exeExclusionWords.Any(ew => exeName.Contains(ew.ToLower()));
+                    return exeName == gameDir.Name.ToLower() || exeName == gameName.ToLower() || !exeExclusionWords.Any(ew => exeName.Contains(ew.ToLower()));
                 });
                 if (string.IsNullOrEmpty(exe))
                 {
@@ -151,36 +164,40 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
                     continue;
                 }
 
-                var existingApp = sunshineAppInstance.apps?.FirstOrDefault(g => g.cmd == exe || g.name == gameName);
+                var existingApp = sunshineAppInstance.apps?.FirstOrDefault(g => g.Cmd == exe || g.Name == gameName);
                 if (forceUpdate || existingApp == null)
                 {
+                    if (forceUpdate && existingApp != null)
+                    {
+                        sunshineAppInstance.apps.Remove(existingApp);
+                    }
                     if (exe.Contains("gamelaunchhelper.exe"))
                     {
                         //xbox game pass game
                         existingApp = new SunshineApp()
                         {
-                            name = gameName,
-                            detached = new List<string>()
+                            Name = gameName,
+                            Detached = new List<string>()
                         {
                             exe
                         },
-                            workingdir = ""
+                            WorkingDir = ""
                         };
                     }
                     else
                     {
                         existingApp = new SunshineApp()
                         {
-                            name = gameName,
-                            cmd = exe,
-                            workingdir = ""
+                            Name = gameName,
+                            Cmd = exe,
+                            WorkingDir = ""
                         };
                     }
                     string coversFolderPath = Path.GetFullPath(sunshineRootFolder.Replace("\\", "/") + "/covers/");
                     string fullPathOfCoverImage = ImageScraper.SaveIGDBImageToCoversFolder(gameName, coversFolderPath).Result;
                     if (!string.IsNullOrEmpty(fullPathOfCoverImage))
                     {
-                        existingApp.imagepath = fullPathOfCoverImage;
+                        existingApp.ImagePath = fullPathOfCoverImage;
                     }
                     else
                     {
@@ -192,7 +209,7 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
                 }
                 else
                 {
-                    Logger.Log($"Found existing Sunshine app for {gameName} already!: " + (existingApp.cmd ?? existingApp.detached?.FirstOrDefault() ?? existingApp.name).Trim());
+                    Logger.Log($"Found existing Sunshine app for {gameName} already!: " + (existingApp.Cmd ?? existingApp.Detached?.FirstOrDefault() ?? existingApp.Name).Trim());
                 }
             }
             catch (Exception ex)
@@ -216,7 +233,7 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
             continue;
         }
         var libraries = VdfConvert.Deserialize(File.ReadAllText(libraryFoldersPath));
-        foreach(var library in libraries.Value)
+        foreach (var library in libraries.Value)
         {
             if (library is not VProperty libProp)
                 continue;
@@ -237,7 +254,17 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
             ScanFolder(platformDir);
         }
     }
-    Logger.Log("Finding Games Completed");
+
+    if (ensureDesktop)
+    {
+        sunshineAppInstance.apps.Add(new DesktopApp());
+    }
+    if (ensureSteamBigPicture)
+    {
+        sunshineAppInstance.apps.Add(new SteamBigPictureApp());
+    }
+
+        Logger.Log("Finding Games Completed");
     if (gamesAdded > 0 || gamesRemoved > 0)
     {
         if (FileWriter.UpdateConfig(sunshineAppsJson, sunshineAppInstance))
@@ -250,7 +277,7 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
         Logger.Log("No new games were found to be added to Sunshine");
     }
 
-}, addlDirectoriesOption, addlExeExclusionWords, sunshineConfigLocationOption, forceOption, removeUninstalledOption);
+}, addlDirectoriesOption, addlExeExclusionWords, sunshineConfigLocationOption, forceOption, removeUninstalledOption, ensureDesktopAppOption, ensureSteamBigPictureOption);
 
 string CleanGameName(string name)
 {
@@ -259,6 +286,7 @@ string CleanGameName(string name)
     {
         name = name.Replace(toRemove, "");
     }
+
     return name.Trim();
 }
 
