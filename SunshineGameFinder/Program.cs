@@ -251,6 +251,13 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
     }
 
     if (ensureDesktop)
+    {
+        sunshineAppInstance.apps.Add(new DesktopApp());
+    }
+    if (ensureSteamBigPicture)
+    {
+        sunshineAppInstance.apps.Add(new SteamBigPictureApp());
+    }
 
         Logger.Log("Finding Games Completed");
     if (gamesAdded > 0 || gamesRemoved > 0)
