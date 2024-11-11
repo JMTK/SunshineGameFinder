@@ -38,8 +38,16 @@ namespace SunshineGameFinder
         public int exittimeout { get; set; } = 5;
     }
 
+    public class Env
+    {
+        [JsonPropertyName("PATH")]
+        public string? Path { get; set; }
+    }
+
     public class SunshineConfig
     {
+        [JsonPropertyName("env")]
+        public required Env Env { get; set; }
         public List<SunshineApp>? apps { get; set; }
     }
 }
