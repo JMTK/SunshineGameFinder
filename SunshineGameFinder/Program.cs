@@ -166,6 +166,10 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
                 var existingApp = sunshineAppInstance.apps?.FirstOrDefault(g => g.Cmd == exe || g.Name == gameName);
                 if (forceUpdate || existingApp == null)
                 {
+                    if (forceUpdate && existingApp != null)
+                    {
+                        sunshineAppInstance.apps.Remove(existingApp);
+                    }
                     if (exe.Contains("gamelaunchhelper.exe"))
                     {
                         //xbox game pass game

@@ -32,7 +32,7 @@ namespace SunshineGameFinder
         public string Name { get; set; }
 
         [JsonPropertyName("image-path")]
-        public string ImagePath { get; set; }
+        public string ImagePath { get; set; } = "";
 
         [JsonPropertyName("output")]
         public string? Output { get; set; }
