@@ -13,8 +13,8 @@
 		<RepositoryUrl>https://github.com/JMTK/SunshineGameFinder</RepositoryUrl>
 		<GenerateDocumentationFile>False</GenerateDocumentationFile>
 		<SignAssembly>False</SignAssembly>
-		<AssemblyVersion>1.8.2</AssemblyVersion>
-		<FileVersion>1.8.2</FileVersion>
+		<AssemblyVersion>1.9.2</AssemblyVersion>
+		<FileVersion>1.9.2</FileVersion>
 		<JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
 	</PropertyGroup>
 
