@@ -67,6 +67,6 @@ namespace SunshineGameFinder
 
     public class SunshineConfig
     {
-        public List<SunshineApp> apps { get; set; }
+        public List<SunshineApp>? apps { get; set; }
     }
 }

@@ -5,13 +5,14 @@ using System.Text.Json;
 using SunshineGameFinder;
 using System.CommandLine;
 using System.Text.RegularExpressions;
+using System.Linq;
 
 // constants
 const string wildcatDrive = @"*:\";
 const string steamLibraryFolders = @"Program Files (x86)\Steam\steamapps\libraryfolders.vdf";
 
 // default values
-var gameDirs = new List<string>() { @"*:\Program Files (x86)\Steam\steamapps\common", @"*:\XboxGames", @"*:\Program Files\EA Games", @"*:\Program Files\Epic Games\", @"*:\Program Files (x86)\Ubisoft\Ubisoft Game Launcher\games" };
+var gameDirs = new HashSet<string>() { @"*:\Program Files (x86)\Steam\steamapps\common", @"*:\XboxGames", @"*:\Program Files\EA Games", @"*:\Program Files\Epic Games\", @"*:\Program Files (x86)\Ubisoft\Ubisoft Game Launcher\games" };
 var exclusionWords = new List<string>() { "Steam" };
 var exeExclusionWords = new List<string>() { "Steam", "Cleanup", "DX", "Uninstall", "Touchup", "redist", "Crash", "Editor", "crs-handler" };
 
@@ -68,7 +69,13 @@ Have an issue or an idea? Come contribute at https://github.com/JMTK/SunshineGam
 // options handler
 rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLocation, forceUpdate, removeUninstalled, ensureDesktop, ensureSteamBigPicture) =>
 {
-    gameDirs.AddRange(addlDirectories);
+    foreach (var dir in addlDirectories)
+    {
+        if (Directory.Exists(dir))
+        {
+            gameDirs.Add(dir);
+        }
+    }
     exeExclusionWords.AddRange(addlExeExclusionWords);
     var sunshineAppsJson = sunshineConfigLocation;
     var sunshineRootFolder = Path.GetDirectoryName(sunshineAppsJson);
@@ -79,6 +86,9 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
         return;
     }
     var sunshineAppInstance = JsonSerializer.Deserialize<SunshineConfig>(File.ReadAllText(sunshineAppsJson), SourceGenerationContext.Default.SunshineConfig);
+
+    sunshineAppInstance ??= new SunshineConfig();
+    sunshineAppInstance.apps ??= new List<SunshineApp>();
 
     var gamesAdded = 0;
     var gamesRemoved = 0;
@@ -114,8 +124,16 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
         return;
     }
 
+    var foldersScanned = new HashSet<string>();
     void ScanFolder(string folder)
     {
+        if (folder == null)
+            return;
+
+        if (foldersScanned.Contains(folder))
+            return;
+
+        foldersScanned.Add(folder);
         Logger.Log($"Scanning for games in {folder}...");
         var di = new DirectoryInfo(folder);
         if (!di.Exists)
