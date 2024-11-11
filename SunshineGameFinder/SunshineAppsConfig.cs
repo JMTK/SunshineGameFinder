@@ -65,8 +65,16 @@ namespace SunshineGameFinder
         public List<string>? Detached { get; set; }
     }
 
+    public class Env
+    {
+        [JsonPropertyName("PATH")]
+        public string? Path { get; set; }
+    }
+
     public class SunshineConfig
     {
+        [JsonPropertyName("env")]
+        public required Env Env { get; set; }
         public List<SunshineApp>? apps { get; set; }
     }
 }

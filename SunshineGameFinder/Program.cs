@@ -87,8 +87,9 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
     }
     var sunshineAppInstance = JsonSerializer.Deserialize<SunshineConfig>(File.ReadAllText(sunshineAppsJson), SourceGenerationContext.Default.SunshineConfig);
 
-    sunshineAppInstance ??= new SunshineConfig();
+    sunshineAppInstance ??= new SunshineConfig() { Env = new Env() };
     sunshineAppInstance.apps ??= new List<SunshineApp>();
+    sunshineAppInstance.Env ??= new Env();
 
     var gamesAdded = 0;
     var gamesRemoved = 0;
