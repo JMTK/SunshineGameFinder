@@ -45,6 +45,19 @@ removeUninstalledOption.AddAlias("-ru");
 removeUninstalledOption.SetDefaultValue(false);
 rootCommand.AddOption(removeUninstalledOption);
 
+var ensureDesktopAppOption = new Option<bool>("--ensure-desktop-app", "Ensures that the 'Desktop' app is there");
+ensureDesktopAppOption.AllowMultipleArgumentsPerToken = false;
+ensureDesktopAppOption.AddAlias("-desktop");
+ensureDesktopAppOption.SetDefaultValue(false);
+rootCommand.AddOption(ensureDesktopAppOption);
+
+var ensureSteamBigPictureOption = new Option<bool>("--ensure-steam-big-picture", "Ensures that the 'Steam Big Picture' app is there");
+ensureSteamBigPictureOption.AllowMultipleArgumentsPerToken = false;
+ensureSteamBigPictureOption.AddAlias("-bigpicture");
+ensureSteamBigPictureOption.SetDefaultValue(false);
+rootCommand.AddOption(ensureSteamBigPictureOption);
+
+
 Logger.Log($@"
 Thanks for using the Sunshine Game Finder! App Version: {System.Reflection.Assembly.GetExecutingAssembly().GetName().Version} - Runtime: {System.Environment.Version}
 
@@ -53,7 +66,7 @@ Searches your computer for various common game install paths for the Sunshine ap
 Have an issue or an idea? Come contribute at https://github.com/JMTK/SunshineGameFinder
 ");
 // options handler
-rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLocation, forceUpdate, removeUninstalled) =>
+rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLocation, forceUpdate, removeUninstalled, ensureDesktop, ensureSteamBigPicture) =>
 {
     gameDirs.AddRange(addlDirectories);
     exeExclusionWords.AddRange(addlExeExclusionWords);
@@ -77,9 +90,9 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
             var existingApp = sunshineAppInstance.apps[i];
             if (existingApp != null)
             {
-                var exeStillExists = existingApp.cmd == null && existingApp.detached == null || 
-                                     existingApp.cmd != null && File.Exists(existingApp.cmd) || 
-                                     existingApp.detached != null && existingApp.detached.Any(detachedCommand =>
+                var exeStillExists = existingApp.Cmd == null && existingApp.Detached == null ||
+                                     existingApp.Cmd != null && File.Exists(existingApp.Cmd) ||
+                                     existingApp.Detached != null && existingApp.Detached.Any(detachedCommand =>
                                      {
                                          return detachedCommand == null ||
                                           !detachedCommand.Contains("exe") ||
@@ -87,7 +100,7 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
                                      });
                 if (!exeStillExists)
                 {
-                    Logger.Log($"{existingApp.name} no longer has an exe, removing from apps config...");
+                    Logger.Log($"{existingApp.Name} no longer has an exe, removing from apps config...");
                     sunshineAppInstance.apps.RemoveAt(i);
                     gamesRemoved++;
                 }
@@ -112,65 +125,73 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
         }
         foreach (var gameDir in di.GetDirectories())
         {
-            Logger.Log($"\tLooking in {gameDir.FullName.Replace(folder, "")}...", false);
-            var gameName = CleanGameName(gameDir.Name);
-            if (exclusionWords.Any(ew => gameName.Contains(ew)))
+            try
             {
-                Logger.Log($"Skipping due to excluded word match", LogLevel.Trace);
-                continue;
-            }
-            var exe = Directory.GetFiles(gameDir.FullName, "*.exe", SearchOption.AllDirectories).FirstOrDefault(exefile => {
-                var exeName = new FileInfo(exefile).Name.ToLower();
-                return exeName == gameName.ToLower() || !exeExclusionWords.Any(ew => exeName.Contains(ew.ToLower()));
-            });
-            if (string.IsNullOrEmpty(exe))
-            {
-                Logger.Log($"EXE not be found", LogLevel.Warning);
-                continue;
-            }
+                Logger.Log($"\tLooking in {gameDir.FullName.Replace(folder, "")}...", false);
+                var gameName = CleanGameName(gameDir.Name);
+                if (exclusionWords.Any(ew => gameName.Contains(ew)))
+                {
+                    Logger.Log($"Skipping due to excluded word match", LogLevel.Trace);
+                    continue;
+                }
+                var exe = Directory.GetFiles(gameDir.FullName, "*.exe", SearchOption.AllDirectories).FirstOrDefault(exefile =>
+                {
+                    var exeName = new FileInfo(exefile).Name.ToLower();
+                    return exeName == gameDir.Name.ToLower() || exeName == gameName.ToLower() || !exeExclusionWords.Any(ew => exeName.Contains(ew.ToLower()));
+                });
+                if (string.IsNullOrEmpty(exe))
+                {
+                    Logger.Log($"EXE not be found", LogLevel.Warning);
+                    continue;
+                }
 
-            var existingApp = sunshineAppInstance.apps.FirstOrDefault(g => g.cmd == exe || g.name == gameName);
-            if (forceUpdate || existingApp == null)
-            {
-                if (exe.Contains("gamelaunchhelper.exe"))
+                var existingApp = sunshineAppInstance.apps?.FirstOrDefault(g => g.Cmd == exe || g.Name == gameName);
+                if (forceUpdate || existingApp == null)
                 {
-                    //xbox game pass game
-                    existingApp = new SunshineApp()
+                    if (exe.Contains("gamelaunchhelper.exe"))
                     {
-                        name = gameName,
-                        detached = new List<string>()
+                        //xbox game pass game
+                        existingApp = new SunshineApp()
+                        {
+                            Name = gameName,
+                            Detached = new List<string>()
+                        {
+                            exe
+                        },
+                            WorkingDir = ""
+                        };
+                    }
+                    else
                     {
-                        exe
-                    },
-                        workingdir = ""
-                    };
+                        existingApp = new SunshineApp()
+                        {
+                            Name = gameName,
+                            Cmd = exe,
+                            WorkingDir = ""
+                        };
+                    }
+                    string coversFolderPath = Path.GetFullPath(sunshineRootFolder.Replace("\\", "/") + "/covers/");
+                    string fullPathOfCoverImage = ImageScraper.SaveIGDBImageToCoversFolder(gameName, coversFolderPath).Result;
+                    if (!string.IsNullOrEmpty(fullPathOfCoverImage))
+                    {
+                        existingApp.ImagePath = fullPathOfCoverImage;
+                    }
+                    else
+                    {
+                        Logger.Log("Failed to find cover image for " + gameName, LogLevel.Warning);
+                    }
+                    gamesAdded++;
+                    Logger.Log($"Adding new game to Sunshine apps: {gameName} - {exe}", LogLevel.Success);
+                    sunshineAppInstance.apps.Add(existingApp);
                 }
                 else
                 {
-                    existingApp = new SunshineApp()
-                    {
-                        name = gameName,
-                        cmd = exe,
-                        workingdir = ""
-                    };
+                    Logger.Log($"Found existing Sunshine app for {gameName} already!: " + (existingApp.Cmd ?? existingApp.Detached?.FirstOrDefault() ?? existingApp.Name).Trim());
                 }
-                string coversFolderPath = Path.GetFullPath(sunshineRootFolder.Replace("\\", "/") + "/covers/");
-                string fullPathOfCoverImage = ImageScraper.SaveIGDBImageToCoversFolder(gameName, coversFolderPath).Result;
-                if (!string.IsNullOrEmpty(fullPathOfCoverImage))
-                {
-                    existingApp.imagepath = fullPathOfCoverImage;
-                }
-                else
-                {
-                    Logger.Log("Failed to find cover image for " + gameName, LogLevel.Warning);
-                }
-                gamesAdded++;
-                Logger.Log($"Adding new game to Sunshine apps: {gameName} - {exe}", LogLevel.Success);
-                sunshineAppInstance.apps.Add(existingApp);
             }
-            else
+            catch (Exception ex)
             {
-                Logger.Log($"Found existing Sunshine app for {gameName} already!: " + (existingApp.cmd ?? existingApp.detached.FirstOrDefault() ?? existingApp.name).Trim());
+                Logger.Log(ex.Message, LogLevel.Error);
             }
         }
         Console.WriteLine(""); //blank line to separate platforms
@@ -189,7 +210,7 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
             continue;
         }
         var libraries = VdfConvert.Deserialize(File.ReadAllText(libraryFoldersPath));
-        foreach(var library in libraries.Value)
+        foreach (var library in libraries.Value)
         {
             if (library is not VProperty libProp)
                 continue;
@@ -210,7 +231,10 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
             ScanFolder(platformDir);
         }
     }
-    Logger.Log("Finding Games Completed");
+
+    if (ensureDesktop)
+
+        Logger.Log("Finding Games Completed");
     if (gamesAdded > 0 || gamesRemoved > 0)
     {
         if (FileWriter.UpdateConfig(sunshineAppsJson, sunshineAppInstance))
@@ -223,7 +247,7 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
         Logger.Log("No new games were found to be added to Sunshine");
     }
 
-}, addlDirectoriesOption, addlExeExclusionWords, sunshineConfigLocationOption, forceOption, removeUninstalledOption);
+}, addlDirectoriesOption, addlExeExclusionWords, sunshineConfigLocationOption, forceOption, removeUninstalledOption, ensureDesktopAppOption, ensureSteamBigPictureOption);
 
 string CleanGameName(string name)
 {
@@ -232,6 +256,7 @@ string CleanGameName(string name)
     {
         name = name.Replace(toRemove, "");
     }
+
     return name.Trim();
 }
 

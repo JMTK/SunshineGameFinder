@@ -1,4 +1,5 @@
 ﻿using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace SunshineGameFinder
 {
@@ -22,7 +23,12 @@ namespace SunshineGameFinder
                 string backUpFilePath = Path.Combine(folderPath, $"{Path.GetFileNameWithoutExtension(filePath)}_{DateTime.Now.ToString("MMddyyyy_HHmmss")}.{backupFileExtension}");
                 File.Move(filePath, backUpFilePath);
 
-                File.WriteAllText(filePath, JsonSerializer.Serialize<SunshineConfig>(config, SourceGenerationContext.Default.SunshineConfig));
+                string serializedJson = JsonSerializer.Serialize<SunshineConfig>(config, SourceGenerationContext.Default.SunshineConfig);
+                string fixedUnicode = Regex.Replace(serializedJson, @"\\u(?<Value>[0-9A-Fa-f]{4})", m =>
+                {
+                    return ((char)Convert.ToInt32(m.Groups["Value"].Value, 16)).ToString();
+                });
+                File.WriteAllText(filePath, fixedUnicode);
             }
             catch (Exception e)
             {

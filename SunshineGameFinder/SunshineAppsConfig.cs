@@ -8,34 +8,61 @@ using System.Text.Json.Serialization;
 
 namespace SunshineGameFinder
 {
-    [JsonSourceGenerationOptions(WriteIndented = true)]
+    [JsonSourceGenerationOptions(WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
     [JsonSerializable(typeof(SunshineConfig))]
     internal partial class SourceGenerationContext : JsonSerializerContext
     {
     }
+    // Root myDeserializedClass = JsonSerializer.Deserialize<Root>(myJsonResponse);
+    public class PrepCmd
+    {
+        [JsonPropertyName("do")]
+        public string? Do { get; set; }
+
+        [JsonPropertyName("undo")]
+        public string? Undo { get; set; }
+
+        [JsonPropertyName("elevated")]
+        public string? Elevated { get; set; }
+    }
+
     public class SunshineApp
     {
-        public string name { get; set; }
+        [JsonPropertyName("name")]
+        public string Name { get; set; }
 
         [JsonPropertyName("image-path")]
-        public string imagepath { get; set; }
-        public List<string> detached { get; set; }
-        public string output { get; set; }
-        public string cmd { get; set; }
+        public string ImagePath { get; set; }
+
+        [JsonPropertyName("output")]
+        public string? Output { get; set; }
+
+        [JsonPropertyName("cmd")]
+        public string? Cmd { get; set; }
 
         [JsonPropertyName("working-dir")]
-        public string workingdir { get; set; }
+        public string? WorkingDir { get; set; }
 
         [JsonPropertyName("exclude-global-prep-cmd")]
-        public bool excludeglobalprepcmd { get; set; }
-        public bool elevated { get; set; }
+        public string? ExcludeGlobalPrepCmd { get; set; }
+
+        [JsonPropertyName("elevated")]
+        public string? Elevated { get; set; }
+
         [JsonPropertyName("auto-detach")]
-        public bool autodetach { get; set; }
+        public string? AutoDetach { get; set; }
+
         [JsonPropertyName("wait-all")]
-        public bool waitall { get; set; }
+        public string? WaitAll { get; set; }
 
         [JsonPropertyName("exit-timeout")]
-        public int exittimeout { get; set; } = 5;
+        public string? ExitTimeout { get; set; }
+
+        [JsonPropertyName("prep-cmd")]
+        public List<PrepCmd>? PrepCmd { get; set; }
+
+        [JsonPropertyName("detached")]
+        public List<string>? Detached { get; set; }
     }
 
     public class SunshineConfig
