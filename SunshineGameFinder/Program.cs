@@ -130,18 +130,9 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
             var existingApp = sunshineAppInstance.apps[i];
             if (existingApp != null)
             {
-                // Special case for steam big picture (Maybe should add a case to check if cmd starts with steam://?)
-                var steamBigPicture = new SteamBigPictureApp();
-                if (existingApp.Name == steamBigPicture.Name && 
-                    existingApp.Cmd == steamBigPicture.Cmd &&
-                    existingApp.AutoDetach == steamBigPicture.AutoDetach &&
-                    existingApp.WaitAll == steamBigPicture.WaitAll)
-                {
-                    continue;
-                }
-
                 var exeStillExists = existingApp.Cmd == null && existingApp.Detached == null ||
                                      existingApp.Cmd != null && File.Exists(existingApp.Cmd) ||
+                                     existingApp.Cmd?.StartsWith("steam://") == true ||
                                      existingApp.Detached != null && existingApp.Detached.Any(detachedCommand =>
                                      {
                                          return detachedCommand == null ||
