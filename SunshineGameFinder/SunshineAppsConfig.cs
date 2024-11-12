@@ -50,6 +50,26 @@ namespace SunshineGameFinder
 
             return path;
         }
+
+        public static string FormatEnvPath(string? path)
+        {
+            if (string.IsNullOrEmpty(path)) return string.Empty;
+
+            // Split into separate paths
+            var paths = path.Split(';', StringSplitOptions.RemoveEmptyEntries);
+            
+            // Process each path
+            var formattedPaths = paths.Select(p => 
+            {
+                // Remove spaces at the beginning and end, and any quotes
+                var trimmed = p.Trim().Trim('"');
+                // Normalize slashes (optional, but preferred for Windows)
+                return trimmed.Replace("/", "\\").TrimEnd('\\');
+            });
+
+            // Join back with semicolon
+            return string.Join(";", formattedPaths);
+        }
     }
 
     public class SunshineApp
@@ -120,7 +140,7 @@ namespace SunshineGameFinder
         public string? Path
         {
             get => path;
-            set => path = value != null ? PathFormatter.FormatPath(value) : null;
+            set => path = value != null ? PathFormatter.FormatEnvPath(value) : null;
         }
     }
 
