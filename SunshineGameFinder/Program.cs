@@ -6,6 +6,36 @@ using SunshineGameFinder;
 using System.CommandLine;
 using System.Text.RegularExpressions;
 using System.Linq;
+using System.Security.Principal;
+using System.Diagnostics;
+
+// Add admin check before any operations
+if (!IsRunAsAdmin())
+{
+    // Restart program and run as admin
+    var exeName = Process.GetCurrentProcess().MainModule?.FileName;
+    if (exeName != null)
+    {
+        try
+        {
+            var processInfo = new ProcessStartInfo(exeName)
+            {
+                UseShellExecute = true,
+                Verb = "runas",   // This triggers the UAC elevation prompt
+                Arguments = string.Join(" ", args)  // Pass along any command line arguments
+            };
+            
+            Process.Start(processInfo);
+            return; // Exit this instance
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            // User declined the UAC prompt
+            Logger.Log("This application requires administrative privileges to write to the Sunshine config directory. Please run as administrator.", LogLevel.Error);
+            return;
+        }
+    }
+}
 
 // constants
 const string wildcatDrive = @"*:\";
@@ -93,7 +123,6 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
 
     var gamesAdded = 0;
     var gamesRemoved = 0;
-
     if (removeUninstalled)
     {
         for (int i = sunshineAppInstance.apps.Count() - 1; i >= 0; i--) //keep tolist so we can remove elements while iterating on the "copy"
@@ -101,6 +130,16 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
             var existingApp = sunshineAppInstance.apps[i];
             if (existingApp != null)
             {
+                // Special case for steam big picture (Maybe should add a case to check if cmd starts with steam://?)
+                var steamBigPicture = new SteamBigPictureApp();
+                if (existingApp.Name == steamBigPicture.Name && 
+                    existingApp.Cmd == steamBigPicture.Cmd &&
+                    existingApp.AutoDetach == steamBigPicture.AutoDetach &&
+                    existingApp.WaitAll == steamBigPicture.WaitAll)
+                {
+                    continue;
+                }
+
                 var exeStillExists = existingApp.Cmd == null && existingApp.Detached == null ||
                                      existingApp.Cmd != null && File.Exists(existingApp.Cmd) ||
                                      existingApp.Detached != null && existingApp.Detached.Any(detachedCommand =>
@@ -277,6 +316,9 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
         Logger.Log("No new games were found to be added to Sunshine");
     }
 
+    Logger.Log("\nPress any key to exit...");
+    Console.ReadKey();
+
 }, addlDirectoriesOption, addlExeExclusionWords, sunshineConfigLocationOption, forceOption, removeUninstalledOption, ensureDesktopAppOption, ensureSteamBigPictureOption);
 
 string CleanGameName(string name)
@@ -288,6 +330,22 @@ string CleanGameName(string name)
     }
 
     return name.Trim();
+}
+
+static bool IsRunAsAdmin()
+{
+    try
+    {
+        using (WindowsIdentity identity = WindowsIdentity.GetCurrent())
+        {
+            WindowsPrincipal principal = new WindowsPrincipal(identity);
+            return principal.IsInRole(WindowsBuiltInRole.Administrator);
+        }
+    }
+    catch
+    {
+        return false;
+    }
 }
 
 rootCommand.Invoke(args);
