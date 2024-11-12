@@ -35,14 +35,14 @@ namespace SunshineGameFinder
             // First remove any existing quotes at the start/end
             path = path.Trim('"');
 
-            // Не заменяем слеши на обратные для steam:// протокола
+            // Do not normalize steam:// protocol
             if (!path.StartsWith("steam://", StringComparison.OrdinalIgnoreCase))
             {
                 // Normalize slashes to backslashes
                 path = path.Replace("/", "\\");
             }
 
-            // If path has spaces or quotes, we need to wrap it in quotes
+            // If path has spaces we need to wrap it in quotes
             if (path.Contains(" "))
             {
                 return $"\"{path}\"";
