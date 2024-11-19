@@ -1,5 +1,7 @@
 ﻿using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Text.Encodings.Web;
+using System.Text.Json.Serialization;
 
 namespace SunshineGameFinder
 {
@@ -23,12 +25,15 @@ namespace SunshineGameFinder
                 string backUpFilePath = Path.Combine(folderPath, $"{Path.GetFileNameWithoutExtension(filePath)}_{DateTime.Now.ToString("MMddyyyy_HHmmss")}.{backupFileExtension}");
                 File.Move(filePath, backUpFilePath);
 
-                string serializedJson = JsonSerializer.Serialize<SunshineConfig>(config, SourceGenerationContext.Default.SunshineConfig);
-                string fixedUnicode = Regex.Replace(serializedJson, @"\\u(?<Value>[0-9A-Fa-f]{4})", m =>
+                var options = new JsonSerializerOptions
                 {
-                    return ((char)Convert.ToInt32(m.Groups["Value"].Value, 16)).ToString();
-                });
-                File.WriteAllText(filePath, fixedUnicode);
+                    WriteIndented = true,
+                    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+                    Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+                };
+
+                string serializedJson = JsonSerializer.Serialize(config, options);
+                File.WriteAllText(filePath, serializedJson);
             }
             catch (Exception e)
             {
@@ -60,7 +65,6 @@ namespace SunshineGameFinder
             {
                 Logger.Log($"An error occurred while trying to clean up historic backup files. This should not impact the validity of the new configuration. Exception:{e.Message}", LogLevel.Warning);
             }
-
         }
     }
 }
