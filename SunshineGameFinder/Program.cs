@@ -5,7 +5,6 @@ using System.Text.Json;
 using SunshineGameFinder;
 using System.CommandLine;
 using System.Text.RegularExpressions;
-using System.Linq;
 using System.Security.Principal;
 using System.Diagnostics;
 
@@ -24,7 +23,7 @@ if (!IsRunAsAdmin())
                 Verb = "runas",   // This triggers the UAC elevation prompt
                 Arguments = string.Join(" ", args)  // Pass along any command line arguments
             };
-            
+
             Process.Start(processInfo);
             return; // Exit this instance
         }
@@ -88,6 +87,11 @@ ensureSteamBigPictureOption.AddAlias("-bigpicture");
 ensureSteamBigPictureOption.SetDefaultValue(false);
 rootCommand.AddOption(ensureSteamBigPictureOption);
 
+var nowaitAfterRunning = new Option<bool>("--no-wait", "Don't wait for ");
+nowaitAfterRunning.AllowMultipleArgumentsPerToken = false;
+nowaitAfterRunning.SetDefaultValue(false);
+rootCommand.AddOption(nowaitAfterRunning);
+
 
 Logger.Log($@"
 Thanks for using the Sunshine Game Finder! App Version: {System.Reflection.Assembly.GetExecutingAssembly().GetName().Version} - Runtime: {System.Environment.Version}
@@ -97,7 +101,7 @@ Searches your computer for various common game install paths for the Sunshine ap
 Have an issue or an idea? Come contribute at https://github.com/JMTK/SunshineGameFinder
 ");
 // options handler
-rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLocation, forceUpdate, removeUninstalled, ensureDesktop, ensureSteamBigPicture) =>
+rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLocation, forceUpdate, removeUninstalled, ensureDesktop, ensureSteamBigPicture, nowait) =>
 {
     foreach (var dir in addlDirectories)
     {
@@ -262,13 +266,28 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
             Logger.Log($"libraryfolders.vdf not found on {file.DirectoryName}, skipping...", LogLevel.Warning);
             continue;
         }
-        var libraries = VdfConvert.Deserialize(File.ReadAllText(libraryFoldersPath));
-        foreach (var library in libraries.Value)
+        try
         {
-            if (library is not VProperty libProp)
-                continue;
+            var libraries = VdfConvert.Deserialize(File.ReadAllText(libraryFoldersPath));
+            foreach (var library in libraries.Value)
+            {
+                if (library is not VProperty libProp)
+                    continue;
+                try
+                {
+                    Logger.Log("Found VDF library: " + libProp.Value.ToList().Select(v => v.Value<string>()));
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log("Failed to parse VDF library value: '" + ex.Message + "' at " + libraryFoldersPath, LogLevel.Warning);
+                }
 
-            gameDirs.Add($@"{libProp.Value.Value<string>("path")}\steamapps\common");
+                gameDirs.Add($@"{libProp.Value.Value<string>("path")}\steamapps\common");
+            }
+        }
+        catch (Exception vdfException)
+        {
+            Logger.Log("Failed to parse libraryfolders.vdf: '" + vdfException.Message + "' at " + libraryFoldersPath, LogLevel.Warning);
         }
     }
 
@@ -285,16 +304,16 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
         }
     }
 
-    if (ensureDesktop)
+    if (ensureDesktop && !sunshineAppInstance.apps.Any(app => app.Name == "Desktop"))
     {
         sunshineAppInstance.apps.Add(new DesktopApp());
     }
-    if (ensureSteamBigPicture)
+    if (ensureSteamBigPicture && !sunshineAppInstance.apps.Any(app => app.Name == "Steam Big Picture" || app.Cmd == "steam://open/bigpicture"))
     {
         sunshineAppInstance.apps.Add(new SteamBigPictureApp());
     }
 
-        Logger.Log("Finding Games Completed");
+    Logger.Log("Finding Games Completed");
     if (gamesAdded > 0 || gamesRemoved > 0)
     {
         if (FileWriter.UpdateConfig(sunshineAppsJson, sunshineAppInstance))
@@ -307,10 +326,12 @@ rootCommand.SetHandler((addlDirectories, addlExeExclusionWords, sunshineConfigLo
         Logger.Log("No new games were found to be added to Sunshine");
     }
 
-    Logger.Log("\nPress any key to exit...");
-    Console.ReadKey();
-
-}, addlDirectoriesOption, addlExeExclusionWords, sunshineConfigLocationOption, forceOption, removeUninstalledOption, ensureDesktopAppOption, ensureSteamBigPictureOption);
+    if (!nowait)
+    {
+        Logger.Log("\nPress any key to exit...");
+        Console.ReadKey();
+    }
+}, addlDirectoriesOption, addlExeExclusionWords, sunshineConfigLocationOption, forceOption, removeUninstalledOption, ensureDesktopAppOption, ensureSteamBigPictureOption, nowaitAfterRunning);
 
 string CleanGameName(string name)
 {

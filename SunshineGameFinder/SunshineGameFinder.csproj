@@ -3,7 +3,7 @@
 	<PropertyGroup>
 		<PublishTrimmed>True</PublishTrimmed>
 		<OutputType>Exe</OutputType>
-		<TargetFramework>net8.0</TargetFramework>
+		<TargetFramework>net9.0</TargetFramework>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 		<Title>Sunshine Game Finder</Title>
@@ -13,8 +13,8 @@
 		<RepositoryUrl>https://github.com/JMTK/SunshineGameFinder</RepositoryUrl>
 		<GenerateDocumentationFile>False</GenerateDocumentationFile>
 		<SignAssembly>False</SignAssembly>
-		<AssemblyVersion>1.10.0</AssemblyVersion>
-		<FileVersion>1.10.0</FileVersion>
+		<AssemblyVersion>1.11.0</AssemblyVersion>
+		<FileVersion>1.11.0</FileVersion>
 		<JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
 	</PropertyGroup>
 
