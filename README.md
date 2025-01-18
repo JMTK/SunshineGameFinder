@@ -15,6 +15,7 @@ Searches your computer for various common game install paths for the [Sunshine](
 | -ru, --remove-uninstalled                 | Removes apps whose exes can not be found [default: False]                                                 |
 | -desktop, --ensure-desktop-app            | Ensures that the 'Desktop' app is there [default: False]                                                  |
 | -bigpicture, --ensure-steam-big-picture    | Ensures that the 'Steam Big Picture' app is there [default: False]                                        |
+| --no-wait                                 | Don't wait for user input after finishing                                                                  |
 | --version                                 | Show version information                                                                                   |
 | -?, -h, --help                            | Show help and usage information                                                                            |
 
