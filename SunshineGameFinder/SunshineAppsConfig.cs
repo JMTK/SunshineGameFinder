@@ -45,7 +45,7 @@ namespace SunshineGameFinder
             // If path has spaces we need to wrap it in quotes
             if (path.Contains(" "))
             {
-                return $"\"{path}\"";
+                return $"{path}";
             }
 
             return path;

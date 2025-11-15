@@ -2,7 +2,7 @@
   "profiles": {
     "SunshineGameFinder": {
       "commandName": "Project",
-      "commandLineArgs": "-ru"
+      "commandLineArgs": "-ru --force"
     }
   }
 }

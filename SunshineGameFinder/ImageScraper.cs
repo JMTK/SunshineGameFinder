@@ -4,15 +4,14 @@ namespace SunshineGameFinder
 {
     internal class ImageScraper
     {
-        static string bucketTemplate = "https://db.lizardbyte.dev/buckets/@FIRSTTWOLETTERS.json";
-        static string gameTemplate = "https://db.lizardbyte.dev/games/@ID.json";
+        static string bucketTemplate = "https://raw.githubusercontent.com/LizardByte/GameDB/gh-pages/buckets/@FIRSTTWOLETTERS.json";
+        static string gameTemplate = "https://raw.githubusercontent.com/LizardByte/GameDB/gh-pages/games/@ID.json";
         static readonly HttpClient HttpClient = new HttpClient();
         private class GamesForBucket
         {
             public string name { get; set; }
         }
 
-        // Root myDeserializedClass = JsonConvert.DeserializeObject<Root>(myJsonResponse);
         public class Artwork
         {
             public int id { get; set; }
@@ -132,6 +131,8 @@ namespace SunshineGameFinder
             {
                 return dict.FirstOrDefault(kvp => CalculateSimilarity(kvp.Value.name.ToLower(), gameName.ToLower()) > (percentage / 100));
             }
+
+            // Attempt to find a close match at 90% similarity first, then 75% if that fails
             var game = FindGameFuzzy(90) ?? FindGameFuzzy(75);
             if (game == null)
             {
@@ -149,7 +150,11 @@ namespace SunshineGameFinder
                 var rawJson = await (await HttpClient.GetAsync(gameTemplate.Replace("@ID", gameId.ToString()))).Content.ReadAsStringAsync();
                 var game = JsonSerializer.Deserialize<Game>(rawJson);
                 if (game == null) return null;
-                var coverUrl = game.cover.url;
+                var coverUrl = game.cover?.url;
+                if (string.IsNullOrEmpty(coverUrl))
+                {
+                    return null;
+                }
                 var stream = await (await HttpClient.GetAsync("https:" + coverUrl.Replace("thumb", "cover_big"))).Content.ReadAsStreamAsync();
 
                 string fullpath = coversFolderPath + gameId.ToString() + ".png";
@@ -158,7 +163,7 @@ namespace SunshineGameFinder
                 await stream.CopyToAsync(fs);
                 return fullpath;
             }
-            catch(Exception)
+            catch (Exception)
             {
                 return null;
             }
