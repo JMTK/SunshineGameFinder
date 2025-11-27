@@ -125,46 +125,89 @@ namespace SunshineGameFinder
         /// </summary>
         private static async Task<int> GetIDForGame(string gameName)
         {
-            var rawJson = await (await HttpClient.GetAsync(bucketTemplate.Replace("@FIRSTTWOLETTERS", string.Join("", gameName.Take(2)).ToLower()))).Content.ReadAsStringAsync();
-            var dict = JsonSerializer.Deserialize<Dictionary<int, GamesForBucket>>(rawJson);
-            KeyValuePair<int, GamesForBucket>? FindGameFuzzy(double percentage)
+            try
             {
-                return dict.FirstOrDefault(kvp => CalculateSimilarity(kvp.Value.name.ToLower(), gameName.ToLower()) > (percentage / 100));
-            }
+                var bucketUrl = bucketTemplate.Replace("@FIRSTTWOLETTERS", string.Join("", gameName.Take(2)).ToLower());
+                var rawJson = await (await HttpClient.GetAsync(bucketUrl)).Content.ReadAsStringAsync();
+                var dict = JsonSerializer.Deserialize<Dictionary<int, GamesForBucket>>(rawJson);
+                
+                if (dict == null || dict.Count == 0)
+                {
+                    Logger.Log($"\t\tNo games found in bucket for: {gameName}", LogLevel.Warning);
+                    return -1;
+                }
+                
+                KeyValuePair<int, GamesForBucket>? FindGameFuzzy(double percentage)
+                {
+                    var match = dict.FirstOrDefault(kvp => CalculateSimilarity(kvp.Value.name.ToLower(), gameName.ToLower()) > (percentage / 100));
+                    return match;
+                }
 
-            // Attempt to find a close match at 90% similarity first, then 75% if that fails
-            var game = FindGameFuzzy(90) ?? FindGameFuzzy(75);
-            if (game == null)
+                // Attempt to find a close match at 90% similarity first, then 75% if that fails
+                var game = FindGameFuzzy(90) ?? FindGameFuzzy(75);
+                
+                if (game == null)
+                {
+                    Logger.Log($"\t\tCould not find game ID for: {gameName}", LogLevel.Warning);
+                    return -1;
+                }
+                
+                return game.Value.Key;
+            }
+            catch (Exception ex)
             {
-                //couldn't find game
+                Logger.Log($"\t\tError getting game ID for {gameName}: {ex.Message}", LogLevel.Error);
                 return -1;
             }
-            return game.Value.Key;
         }
 
         public static async Task<string> SaveIGDBImageToCoversFolder(string gameName, string coversFolderPath)
         {
             try
             {
+                // Ensure the covers directory exists
+                if (!Directory.Exists(coversFolderPath))
+                {
+                    Directory.CreateDirectory(coversFolderPath);
+                }
+                
                 int gameId = await GetIDForGame(gameName);
-                var rawJson = await (await HttpClient.GetAsync(gameTemplate.Replace("@ID", gameId.ToString()))).Content.ReadAsStringAsync();
-                var game = JsonSerializer.Deserialize<Game>(rawJson);
-                if (game == null) return null;
-                var coverUrl = game.cover?.url;
-                if (string.IsNullOrEmpty(coverUrl))
+                if (gameId == -1)
                 {
                     return null;
                 }
-                var stream = await (await HttpClient.GetAsync("https:" + coverUrl.Replace("thumb", "cover_big"))).Content.ReadAsStreamAsync();
+                
+                var gameUrl = gameTemplate.Replace("@ID", gameId.ToString());
+                var rawJson = await (await HttpClient.GetAsync(gameUrl)).Content.ReadAsStringAsync();
+                var game = JsonSerializer.Deserialize<Game>(rawJson);
+                
+                if (game == null)
+                {
+                    Logger.Log($"\t\tFailed to deserialize game data for ID: {gameId}", LogLevel.Warning);
+                    return null;
+                }
+                
+                var coverUrl = game.cover?.url;
+                if (string.IsNullOrEmpty(coverUrl))
+                {
+                    Logger.Log($"\t\tNo cover URL found for game: {gameName} (ID: {gameId})", LogLevel.Warning);
+                    return null;
+                }
+                
+                var imageUrl = "https:" + coverUrl.Replace("thumb", "cover_big");
+                var stream = await (await HttpClient.GetAsync(imageUrl)).Content.ReadAsStreamAsync();
 
-                string fullpath = coversFolderPath + gameId.ToString() + ".png";
+                string fullpath = Path.Combine(coversFolderPath, gameId.ToString() + ".png");
+                
                 using FileStream fs = new(fullpath, FileMode.OpenOrCreate);
                 stream.Position = 0;
                 await stream.CopyToAsync(fs);
+                
                 return fullpath;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                Logger.Log($"\t\tError downloading cover for {gameName}: {ex.Message}", LogLevel.Error);
                 return null;
             }
         }

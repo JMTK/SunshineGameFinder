@@ -14,6 +14,44 @@ namespace SunshineGameFinder
     {
     }
 
+    public class FlexibleStringConverter : JsonConverter<string?>
+    {
+        public override string? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            return reader.TokenType switch
+            {
+                JsonTokenType.String => reader.GetString(),
+                JsonTokenType.True => "true",
+                JsonTokenType.False => "false",
+                JsonTokenType.Number => reader.GetInt32().ToString(),
+                JsonTokenType.Null => null,
+                _ => throw new JsonException($"Unexpected token type: {reader.TokenType}")
+            };
+        }
+
+        public override void Write(Utf8JsonWriter writer, string? value, JsonSerializerOptions options)
+        {
+            if (value == null)
+            {
+                writer.WriteNullValue();
+                return;
+            }
+
+            if (bool.TryParse(value, out var boolValue))
+            {
+                writer.WriteBooleanValue(boolValue);
+            }
+            else if (int.TryParse(value, out var intValue))
+            {
+                writer.WriteNumberValue(intValue);
+            }
+            else
+            {
+                writer.WriteStringValue(value);
+            }
+        }
+    }
+
     public class PrepCmd
     {
         [JsonPropertyName("do")]
@@ -23,6 +61,7 @@ namespace SunshineGameFinder
         public string? Undo { get; set; }
 
         [JsonPropertyName("elevated")]
+        [JsonConverter(typeof(FlexibleStringConverter))]
         public string? Elevated { get; set; }
     }
 
@@ -105,18 +144,23 @@ namespace SunshineGameFinder
         }
 
         [JsonPropertyName("exclude-global-prep-cmd")]
+        [JsonConverter(typeof(FlexibleStringConverter))]
         public string? ExcludeGlobalPrepCmd { get; set; }
 
         [JsonPropertyName("elevated")]
+        [JsonConverter(typeof(FlexibleStringConverter))]
         public string? Elevated { get; set; }
 
         [JsonPropertyName("auto-detach")]
+        [JsonConverter(typeof(FlexibleStringConverter))]
         public string? AutoDetach { get; set; }
 
         [JsonPropertyName("wait-all")]
+        [JsonConverter(typeof(FlexibleStringConverter))]
         public string? WaitAll { get; set; }
 
         [JsonPropertyName("exit-timeout")]
+        [JsonConverter(typeof(FlexibleStringConverter))]
         public string? ExitTimeout { get; set; }
 
         [JsonPropertyName("prep-cmd")]
