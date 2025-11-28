@@ -1,12 +1,13 @@
 // See https://aka.ms/new-console-template for more information
 using Gameloop.Vdf;
 using Gameloop.Vdf.Linq;
-using System.Text.Json;
 using SunshineGameFinder;
 using System.CommandLine;
-using System.Text.RegularExpressions;
-using System.Security.Principal;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
+using System.Security.Principal;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 
 // Add admin check before any operations
 if (!IsRunAsAdmin())
@@ -366,14 +367,22 @@ string CleanGameName(string name)
     return name.Trim();
 }
 
+[DllImport("libc")]
+static extern uint getuid();
+
 static bool IsRunAsAdmin()
 {
     try
     {
-        using (WindowsIdentity identity = WindowsIdentity.GetCurrent())
+        if (OperatingSystem.IsWindows())
         {
+            using WindowsIdentity identity = WindowsIdentity.GetCurrent();
             WindowsPrincipal principal = new WindowsPrincipal(identity);
             return principal.IsInRole(WindowsBuiltInRole.Administrator);
+        }
+        else
+        {
+            return getuid() == 0;
         }
     }
     catch
