@@ -9,10 +9,6 @@ on:
       - ".editorconfig"
       - ".gcloudignore"
       - ".gitignore"
-      - "CODEOWNERS"
-      - "openapi.json"
-      - "src/locales/**"
-      - ".github/**"
   workflow_dispatch:
   
 # Only allow one instance of this workflow to run at a time. If a commit is pushed that triggers this workflow again, the previous instance will be cancelled
