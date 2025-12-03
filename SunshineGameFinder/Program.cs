@@ -4,7 +4,6 @@ using Gameloop.Vdf.Linq;
 using SunshineGameFinder;
 using System.CommandLine;
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -367,9 +366,6 @@ string CleanGameName(string name)
     return name.Trim();
 }
 
-[DllImport("libc")]
-static extern uint getuid();
-
 static bool IsRunAsAdmin()
 {
     try
@@ -382,7 +378,7 @@ static bool IsRunAsAdmin()
         }
         else
         {
-            return getuid() == 0;
+            return true; // Assume non-Windows OS has necessary permissions or ability to self-elevate
         }
     }
     catch
