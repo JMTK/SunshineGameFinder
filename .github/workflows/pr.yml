@@ -46,7 +46,7 @@ jobs:
         run: |
           dotnet publish -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true -o ${{ env.ARTIFACTS_DIR }}/linux-x64
       
-          - name: VirusTotal Scan
+      - name: VirusTotal Scan
         uses: crazy-max/ghaction-virustotal@v4
         with:
           vt_api_key: ${{ secrets.VT_API_KEY }}
