@@ -1,0 +1,55 @@
+name: Publish builds and VirusTotal scan
+
+on:
+  push:
+    paths-ignore:
+      - "*.md" # README.md
+      - "*.yml" # crowdin.yml, docker-compose.yml, but not app.yaml
+      - "*.example" # .env.example, .env.test.example
+      - ".editorconfig"
+      - ".gcloudignore"
+      - ".gitignore"
+  workflow_dispatch:
+  
+# Only allow one instance of this workflow to run at a time. If a commit is pushed that triggers this workflow again, the previous instance will be cancelled
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ARTIFACTS_DIR: ./artifacts
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: 10.x
+
+      - name: Restore
+        run: dotnet restore SunshineGameFinder
+
+
+      - name: Publish win-x64
+        run: |
+          cd SunshineGameFinder
+          dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o ${{ env.ARTIFACTS_DIR }}/win-x64
+
+      - name: Publish linux-x64
+        run: |
+          cd SunshineGameFinder
+          dotnet publish -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true -o ${{ env.ARTIFACTS_DIR }}/linux-x64
+      
+      - name: VirusTotal Scan
+        uses: crazy-max/ghaction-virustotal@v4
+        with:
+          vt_api_key: ${{ secrets.VIRUSTOTAL_API_KEY }}
+          update_release_body: true
+          files: |
+            ${{ env.ARTIFACTS_DIR }}/linux-x64/SunshineGameFinder
+            ${{ env.ARTIFACTS_DIR }}/win-x64/SunshineGameFinder.exe

@@ -4,7 +4,6 @@ using Gameloop.Vdf.Linq;
 using SunshineGameFinder;
 using System.CommandLine;
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.Text.Json;
 using System.Text.RegularExpressions;
