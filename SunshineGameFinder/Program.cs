@@ -18,20 +18,38 @@ if (!IsRunAsAdmin())
     {
         try
         {
-            var processInfo = new ProcessStartInfo(exeName)
+            if (OperatingSystem.IsWindows())
             {
-                UseShellExecute = true,
-                Verb = "runas",   // This triggers the UAC elevation prompt
-                Arguments = string.Join(" ", args)  // Pass along any command line arguments
-            };
+                var processInfo = new ProcessStartInfo(exeName)
+                {
+                    UseShellExecute = true,
+                    Verb = "runas",   // This triggers the UAC elevation prompt
+                    Arguments = string.Join(" ", args)  // Pass along any command line arguments
+                };
 
-            Process.Start(processInfo);
+                Process.Start(processInfo);
+            }
+            else
+            {
+                var processInfo = new ProcessStartInfo("sudo")
+                {
+                    UseShellExecute = true  // Required for interactive sudo password prompt
+                };
+                processInfo.ArgumentList.Add(exeName);
+                foreach (var arg in args)
+                {
+                    processInfo.ArgumentList.Add(arg);
+                }
+                var process = Process.Start(processInfo);
+                process?.WaitForExit();  // Wait for the elevated process to complete
+            }
+
             return; // Exit this instance
         }
-        catch (System.ComponentModel.Win32Exception)
+        catch (Exception ex)
         {
-            // User declined the UAC prompt
-            Logger.Log("This application requires administrative privileges to write to the Sunshine config directory. Please run as administrator.", LogLevel.Error);
+            // User declined the UAC prompt or sudo failed
+            Logger.Log($"This application requires administrative privileges. Elevation failed: {ex.Message}", LogLevel.Error);
             return;
         }
     }
@@ -367,9 +385,6 @@ string CleanGameName(string name)
     return name.Trim();
 }
 
-[DllImport("libc")]
-static extern uint getuid();
-
 static bool IsRunAsAdmin()
 {
     try
@@ -377,12 +392,13 @@ static bool IsRunAsAdmin()
         if (OperatingSystem.IsWindows())
         {
             using WindowsIdentity identity = WindowsIdentity.GetCurrent();
-            WindowsPrincipal principal = new WindowsPrincipal(identity);
+            WindowsPrincipal principal = new(identity);
             return principal.IsInRole(WindowsBuiltInRole.Administrator);
         }
         else
         {
-            return getuid() == 0;
+            // On Unix systems, check if the current user is root
+            return Environment.UserName == "root";
         }
     }
     catch
