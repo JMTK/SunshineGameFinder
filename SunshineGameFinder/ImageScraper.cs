@@ -4,8 +4,8 @@ namespace SunshineGameFinder
 {
     internal class ImageScraper
     {
-        static string bucketTemplate = "https://raw.githubusercontent.com/LizardByte/GameDB/gh-pages/buckets/@FIRSTTWOLETTERS.json";
-        static string gameTemplate = "https://raw.githubusercontent.com/LizardByte/GameDB/gh-pages/games/@ID.json";
+        static string bucketTemplate = "https://app.lizardbyte.dev/GameDB/buckets/@FIRSTTWOLETTERS.json";
+        static string gameTemplate = "https://app.lizardbyte.dev/GameDB/games/@ID.json";
         static readonly HttpClient HttpClient = new HttpClient();
         private class GamesForBucket
         {
