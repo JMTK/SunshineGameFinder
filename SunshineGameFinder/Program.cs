@@ -1,9 +1,12 @@
 using SunshineGameFinder;
 using System.CommandLine;
 using System.Diagnostics;
-using System.Security.Principal;
 using System.Text.Json;
+#if WINDOWS_BUILD
+using System.Security.Principal;
+#endif
 
+#if WINDOWS_BUILD
 // Only Windows needs elevation (apps.json lives in Program Files). On Linux/macOS it's user-owned under ~/.config/sunshine.
 if (OperatingSystem.IsWindows() && !IsRunAsAdmin())
 {
@@ -28,6 +31,7 @@ if (OperatingSystem.IsWindows() && !IsRunAsAdmin())
         }
     }
 }
+#endif
 
 // constants
 const string wildcardDrive = @"*:\";
@@ -434,6 +438,7 @@ static string QuoteArgument(string arg)
     return $"\"{escaped}\"";
 }
 
+#if WINDOWS_BUILD
 static bool IsRunAsAdmin()
 {
     try
@@ -444,17 +449,14 @@ static bool IsRunAsAdmin()
             WindowsPrincipal principal = new(identity);
             return principal.IsInRole(WindowsBuiltInRole.Administrator);
         }
-        else
-        {
-            // On Unix systems, check if the current user is root
-            return Environment.UserName == "root";
-        }
+        return false;
     }
     catch
     {
         return false;
     }
 }
+#endif
 
 static void RestartSunshineService()
 {
