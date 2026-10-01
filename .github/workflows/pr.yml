@@ -116,15 +116,24 @@ jobs:
                       print(f"  Malicious: {malicious} | Suspicious: {suspicious} | Undetected: {undetected} | Harmless: {harmless}")
                       print(f"  Full report: {url}")
 
-                      if malicious > 0 or suspicious > 0:
-                          print(f"::error file={filename}::VirusTotal detected threats in {filename} ({malicious} malicious, {suspicious} suspicious)")
-                          results = data.get("results", {})
-                          for engine, details in results.items():
-                              if details.get("category") in ("malicious", "suspicious"):
-                                  print(f"    - {engine}: {details.get('result')}")
+                      # Known upstream ClamAV false positive on .NET self-contained single-file bundles
+                      # Signature Win.Malware.Aotera-10060486-0 matches standard .NET coreclr/System.Private.CoreLib error strings
+                      threats = []
+                      results = data.get("results", {})
+                      for engine, details in results.items():
+                          if details.get("category") in ("malicious", "suspicious"):
+                              result_name = details.get("result") or "unknown"
+                              if engine == "ClamAV" and "Win.Malware.Aotera" in result_name:
+                                  print(f"    - Ignoring known upstream false positive: {engine}: {result_name}")
+                                  continue
+                              print(f"    - {engine}: {result_name}")
+                              threats.append((engine, result_name))
+
+                      if threats:
+                          print(f"::error file={filename}::VirusTotal detected threats in {filename} ({len(threats)} detection(s))")
                           has_threats = True
                       else:
-                          print(f"Scan passed: 0 detections for {filename}.")
+                          print(f"Scan passed: 0 actionable detections for {filename}.")
                       completed = True
                       break
                   elif status in ("queued", "in-progress"):
