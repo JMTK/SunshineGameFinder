@@ -464,7 +464,8 @@ static void RestartSunshineService()
     {
         if (OperatingSystem.IsWindows())
         {
-            if (ProcessRunner.Run("powershell", ["-NoProfile", "-NonInteractive", "-Command", "Restart-Service -Name 'SunshineService' -Force"]))
+            ProcessRunner.Run("net", ["stop", "SunshineService"]);
+            if (ProcessRunner.Run("net", ["start", "SunshineService"]))
                 Logger.Log("SunshineService restarted successfully.", LogLevel.Success);
             else
                 Logger.Log("Failed to restart SunshineService.", LogLevel.Warning);

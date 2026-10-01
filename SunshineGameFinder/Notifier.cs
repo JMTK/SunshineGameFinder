@@ -1,3 +1,6 @@
+using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
+
 namespace SunshineGameFinder
 {
     internal static class Notifier
@@ -11,20 +14,7 @@ namespace SunshineGameFinder
                 bool sent;
                 if (OperatingSystem.IsWindows())
                 {
-                    sent = ProcessRunner.Run("powershell.exe",
-                        ["-NoProfile", "-NonInteractive", "-Command",
-                         "Add-Type -AssemblyName System.Windows.Forms; " +
-                         "$n = New-Object System.Windows.Forms.NotifyIcon; " +
-                         "$n.Icon = [System.Drawing.SystemIcons]::Information; " +
-                         "$n.Visible = $true; " +
-                         "$n.ShowBalloonTip(5000, $env:SGF_NOTIFY_TITLE, $env:SGF_NOTIFY_MESSAGE, [System.Windows.Forms.ToolTipIcon]::Info); " +
-                         "Start-Sleep -Milliseconds 1100; " +
-                         "$n.Dispose()"],
-                        new Dictionary<string, string>
-                        {
-                            ["SGF_NOTIFY_TITLE"] = title,
-                            ["SGF_NOTIFY_MESSAGE"] = message
-                        });
+                    sent = ShowWindowsNotification(title, message);
                 }
                 else if (OperatingSystem.IsMacOS())
                 {
@@ -44,5 +34,62 @@ namespace SunshineGameFinder
                 Logger.Log($"Failed to send system notification: {ex.Message}", LogLevel.Warning);
             }
         }
+
+        [SupportedOSPlatform("windows")]
+        private static bool ShowWindowsNotification(string title, string message)
+        {
+            try
+            {
+                var nid = new NOTIFYICONDATA
+                {
+                    cbSize = Marshal.SizeOf<NOTIFYICONDATA>(),
+                    hWnd = IntPtr.Zero,
+                    uID = 1001,
+                    uFlags = 0x00000002 | 0x00000010, // NIF_ICON | NIF_INFO
+                    hIcon = LoadIcon(IntPtr.Zero, (IntPtr)32516), // IDI_INFORMATION
+                    szInfoTitle = title.Length > 63 ? title[..63] : title,
+                    szInfo = message.Length > 255 ? message[..255] : message,
+                    dwInfoFlags = 0x00000001 // NIIF_INFO
+                };
+
+                Shell_NotifyIcon(0, ref nid); // NIM_ADD
+                Thread.Sleep(1000);
+                Shell_NotifyIcon(2, ref nid); // NIM_DELETE
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        private struct NOTIFYICONDATA
+        {
+            public int cbSize;
+            public IntPtr hWnd;
+            public int uID;
+            public int uFlags;
+            public int uCallbackMessage;
+            public IntPtr hIcon;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+            public string szTip;
+            public int dwState;
+            public int dwStateMask;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)]
+            public string szInfo;
+            public int uTimeoutOrVersion;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 64)]
+            public string szInfoTitle;
+            public int dwInfoFlags;
+            public Guid guidItem;
+            public IntPtr hBalloonIcon;
+        }
+
+        [DllImport("shell32.dll", CharSet = CharSet.Unicode, EntryPoint = "Shell_NotifyIconW")]
+        private static extern bool Shell_NotifyIcon(int dwMessage, ref NOTIFYICONDATA lpData);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "LoadIconW")]
+        private static extern IntPtr LoadIcon(IntPtr hInstance, IntPtr lpIconName);
     }
 }
