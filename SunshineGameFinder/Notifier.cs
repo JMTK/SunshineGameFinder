@@ -1,5 +1,7 @@
+#if WINDOWS_BUILD
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+#endif
 
 namespace SunshineGameFinder
 {
@@ -11,17 +13,19 @@ namespace SunshineGameFinder
         {
             try
             {
-                bool sent;
+                bool sent = false;
+#if WINDOWS_BUILD
                 if (OperatingSystem.IsWindows())
                 {
                     sent = ShowWindowsNotification(title, message);
                 }
-                else if (OperatingSystem.IsMacOS())
+#endif
+                if (OperatingSystem.IsMacOS())
                 {
                     sent = ProcessRunner.Run("osascript",
                         ["-e", "on run argv", "-e", "display notification (item 2 of argv) with title (item 1 of argv)", "-e", "end run", title, message]);
                 }
-                else
+                else if (OperatingSystem.IsLinux())
                 {
                     sent = ProcessRunner.Run("notify-send", ["-a", AppName, title, message]);
                 }
@@ -35,6 +39,7 @@ namespace SunshineGameFinder
             }
         }
 
+#if WINDOWS_BUILD
         [SupportedOSPlatform("windows")]
         private static bool ShowWindowsNotification(string title, string message)
         {
@@ -91,5 +96,6 @@ namespace SunshineGameFinder
 
         [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "LoadIconW")]
         private static extern IntPtr LoadIcon(IntPtr hInstance, IntPtr lpIconName);
+#endif
     }
 }
