@@ -53,9 +53,93 @@ jobs:
           -o ${{ env.ARTIFACTS_DIR }}/linux-x64
       
       - name: VirusTotal Scan
+        id: vt
         uses: crazy-max/ghaction-virustotal@v4
         with:
           vt_api_key: ${{ secrets.VIRUSTOTAL_API_KEY }}
           files: |
             ${{ env.ARTIFACTS_DIR }}/linux-x64/SunshineGameFinder
             ${{ env.ARTIFACTS_DIR }}/win-x64/SunshineGameFinder.exe
+
+      - name: Wait for VirusTotal Analysis
+        shell: bash
+        env:
+          VT_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
+          VT_ANALYSIS: ${{ steps.vt.outputs.analysis }}
+        run: |
+          python3 - << 'EOF'
+          import os, sys, time, json, urllib.request
+
+          api_key = os.environ.get("VT_API_KEY", "")
+          analysis_str = os.environ.get("VT_ANALYSIS", "")
+
+          if not analysis_str:
+              print("No analysis output found.")
+              sys.exit(0)
+
+          entries = [e.strip() for e in analysis_str.split(",") if e.strip()]
+          has_threats = False
+
+          for entry in entries:
+              filepath, url = entry.split("=", 1)
+              filename = os.path.basename(filepath)
+              parts = url.rstrip("/").split("/")
+              analysis_id = parts[-2] if parts[-1] == "detection" else parts[-1]
+
+              print(f"\n--- Checking VirusTotal analysis for {filename} (ID: {analysis_id}) ---")
+              req = urllib.request.Request(
+                  f"https://www.virustotal.com/api/v3/analyses/{analysis_id}",
+                  headers={"x-apikey": api_key, "User-Agent": "SunshineGameFinder-CI"}
+              )
+
+              completed = False
+              for attempt in range(1, 46):
+                  try:
+                      with urllib.request.urlopen(req) as resp:
+                          data = json.loads(resp.read().decode())["data"]["attributes"]
+                  except Exception as e:
+                      print(f"  [Attempt {attempt}/45] Request error: {e}. Retrying in 20s...")
+                      time.sleep(20)
+                      continue
+
+                  status = data.get("status", "unknown")
+                  print(f"  [Attempt {attempt}/45] Status: {status}")
+
+                  if status == "completed":
+                      stats = data.get("stats", {})
+                      malicious = stats.get("malicious", 0)
+                      suspicious = stats.get("suspicious", 0)
+                      undetected = stats.get("undetected", 0)
+                      harmless = stats.get("harmless", 0)
+
+                      print(f"\nResults for {filename}:")
+                      print(f"  Malicious: {malicious} | Suspicious: {suspicious} | Undetected: {undetected} | Harmless: {harmless}")
+                      print(f"  Full report: {url}")
+
+                      if malicious > 0 or suspicious > 0:
+                          print(f"::error file={filename}::VirusTotal detected threats in {filename} ({malicious} malicious, {suspicious} suspicious)")
+                          results = data.get("results", {})
+                          for engine, details in results.items():
+                              if details.get("category") in ("malicious", "suspicious"):
+                                  print(f"    - {engine}: {details.get('result')}")
+                          has_threats = True
+                      else:
+                          print(f"Scan passed: 0 detections for {filename}.")
+                      completed = True
+                      break
+                  elif status in ("queued", "in-progress"):
+                      time.sleep(20)
+                  else:
+                      print(f"  Unexpected status '{status}'. Retrying in 20s...")
+                      time.sleep(20)
+
+              if not completed:
+                  print(f"::error file={filename}::Timed out waiting for VirusTotal analysis to complete.")
+                  has_threats = True
+
+          if has_threats:
+              print("\nVirusTotal scan detected threats or failed to complete.")
+              sys.exit(1)
+
+          print("\nAll VirusTotal scans completed successfully and are clean!")
+          EOF

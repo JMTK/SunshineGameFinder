@@ -11,13 +11,20 @@ namespace SunshineGameFinder
                 bool sent;
                 if (OperatingSystem.IsWindows())
                 {
-                    var script = $"[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null; " +
-                                 $"[Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null; " +
-                                 $"$xml = New-Object Windows.Data.Xml.Dom.XmlDocument; " +
-                                 $"$xml.LoadXml('<toast><visual><binding template=\"ToastGeneric\"><text>{EscapeXml(title)}</text><text>{EscapeXml(message)}</text></binding></visual></toast>'); " +
-                                 $"[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('{{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}}\\WindowsPowerShell\\v1.0\\powershell.exe').Show([Windows.UI.Notifications.ToastNotification]::new($xml))";
-
-                    sent = ProcessRunner.Run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script]);
+                    sent = ProcessRunner.Run("powershell.exe",
+                        ["-NoProfile", "-NonInteractive", "-Command",
+                         "Add-Type -AssemblyName System.Windows.Forms; " +
+                         "$n = New-Object System.Windows.Forms.NotifyIcon; " +
+                         "$n.Icon = [System.Drawing.SystemIcons]::Information; " +
+                         "$n.Visible = $true; " +
+                         "$n.ShowBalloonTip(5000, $env:SGF_NOTIFY_TITLE, $env:SGF_NOTIFY_MESSAGE, [System.Windows.Forms.ToolTipIcon]::Info); " +
+                         "Start-Sleep -Milliseconds 1100; " +
+                         "$n.Dispose()"],
+                        new Dictionary<string, string>
+                        {
+                            ["SGF_NOTIFY_TITLE"] = title,
+                            ["SGF_NOTIFY_MESSAGE"] = message
+                        });
                 }
                 else if (OperatingSystem.IsMacOS())
                 {
@@ -37,8 +44,5 @@ namespace SunshineGameFinder
                 Logger.Log($"Failed to send system notification: {ex.Message}", LogLevel.Warning);
             }
         }
-
-        private static string EscapeXml(string text) =>
-            System.Security.SecurityElement.Escape(text) ?? string.Empty;
     }
 }
