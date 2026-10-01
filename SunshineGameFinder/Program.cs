@@ -1,53 +1,28 @@
-// See https://aka.ms/new-console-template for more information
-using Gameloop.Vdf;
-using Gameloop.Vdf.Linq;
 using SunshineGameFinder;
 using System.CommandLine;
 using System.Diagnostics;
 using System.Security.Principal;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 
-// Add admin check before any operations
-if (!IsRunAsAdmin())
+// Only Windows needs elevation (apps.json lives in Program Files). On Linux/macOS it's user-owned under ~/.config/sunshine.
+if (OperatingSystem.IsWindows() && !IsRunAsAdmin())
 {
-    // Restart program and run as admin
-    var exeName = Process.GetCurrentProcess().MainModule?.FileName;
+    var exeName = Environment.ProcessPath;
     if (exeName != null)
     {
         try
         {
-            if (OperatingSystem.IsWindows())
+            Process.Start(new ProcessStartInfo(exeName)
             {
-                var processInfo = new ProcessStartInfo(exeName)
-                {
-                    UseShellExecute = true,
-                    Verb = "runas",   // This triggers the UAC elevation prompt
-                    Arguments = string.Join(" ", args)  // Pass along any command line arguments
-                };
-
-                Process.Start(processInfo);
-            }
-            else
-            {
-                var processInfo = new ProcessStartInfo("sudo")
-                {
-                    UseShellExecute = true  // Required for interactive sudo password prompt
-                };
-                processInfo.ArgumentList.Add(exeName);
-                foreach (var arg in args)
-                {
-                    processInfo.ArgumentList.Add(arg);
-                }
-                var process = Process.Start(processInfo);
-                process?.WaitForExit();  // Wait for the elevated process to complete
-            }
-
+                UseShellExecute = true,
+                Verb = "runas",   // This triggers the UAC elevation prompt
+                Arguments = string.Join(" ", args.Select(QuoteArgument))
+            });
             return; // Exit this instance
         }
         catch (Exception ex)
         {
-            // User declined the UAC prompt or sudo failed
+            // User declined the UAC prompt
             Logger.Log($"This application requires administrative privileges. Elevation failed: {ex.Message}", LogLevel.Error);
             return;
         }
@@ -55,13 +30,25 @@ if (!IsRunAsAdmin())
 }
 
 // constants
-const string wildcatDrive = @"*:\";
-const string steamLibraryFolders = @"Program Files (x86)\Steam\steamapps\libraryfolders.vdf";
+const string wildcardDrive = @"*:\";
 
 // default values
-var gameDirs = new HashSet<string>() { @"*:\Program Files (x86)\Steam\steamapps\common", @"*:\XboxGames", @"*:\Program Files\EA Games", @"*:\Program Files\Epic Games\", @"*:\Program Files (x86)\Ubisoft\Ubisoft Game Launcher\games" };
+var gameDirs = new HashSet<string>(PlatformPaths.PathComparer);
+if (OperatingSystem.IsWindows())
+{
+    gameDirs.UnionWith([
+        @"*:\Program Files (x86)\Steam\steamapps\common",
+        @"*:\XboxGames",
+        @"*:\Program Files\EA Games",
+        @"*:\Program Files\Epic Games",
+        @"*:\Program Files (x86)\Ubisoft\Ubisoft Game Launcher\games",
+        @"*:\Program Files\Rockstar Games",
+    ]);
+}
 var exclusionWords = new List<string>() { "Steam" };
-var exeExclusionWords = new List<string>() { "Steam", "Cleanup", "DX", "Uninstall", "Touchup", "redist", "Crash", "Editor", "crs-handler" };
+// Launcher/runtime folders that live next to games but aren't games
+var excludedFolderNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Launcher", "Social Club", "Rockstar Games Launcher", "Rockstar Games Social Club" };
+var exeExclusionWords = new List<string>() { "Steam", "Cleanup", "DX", "Uninstall", "Touchup", "redist", "Crash", "Editor", "crs-handler", "EasyAntiCheat", "BattlEye", "BEService", "Prereq" };
 
 // command setup
 RootCommand rootCommand = new RootCommand("Searches your computer for various common game install paths for the Sunshine application. After running it, all games that did not already exist will be added to the apps.json, meaning your Moonlight client should see them next time it is started.");
@@ -78,7 +65,7 @@ rootCommand.Options.Add(addlExeExclusionWordsOption);
 var sunshineConfigLocationOption = new Option<string>("--sunshineConfigLocation", "-c");
 sunshineConfigLocationOption.Description = "Specify the Sunshine apps.json location";
 sunshineConfigLocationOption.AllowMultipleArgumentsPerToken = false;
-sunshineConfigLocationOption.DefaultValueFactory = arg => @"C:\Program Files\Sunshine\config\apps.json";
+sunshineConfigLocationOption.DefaultValueFactory = arg => PlatformPaths.GetDefaultSunshineAppsJson();
 rootCommand.Options.Add(sunshineConfigLocationOption);
 
 var forceOption = new Option<bool>("--force", "-f");
@@ -110,6 +97,12 @@ nowaitAfterRunning.AllowMultipleArgumentsPerToken = false;
 nowaitAfterRunning.DefaultValueFactory = arg => (false);
 rootCommand.Options.Add(nowaitAfterRunning);
 
+var notifyOption = new Option<bool>("--notify", "-n");
+notifyOption.AllowMultipleArgumentsPerToken = false;
+notifyOption.Description = "Send a system notification with the results. Useful with --no-wait when running in the background (e.g. scheduled task / cron)";
+notifyOption.DefaultValueFactory = arg => (false);
+rootCommand.Options.Add(notifyOption);
+
 
 Logger.Log($@"
 Thanks for using the Sunshine Game Finder! App Version: {System.Reflection.Assembly.GetExecutingAssembly().GetName().Version} - Runtime: {System.Environment.Version}
@@ -122,36 +115,51 @@ Have an issue or an idea? Come contribute at https://github.com/JMTK/SunshineGam
 ParseResult parseResult = rootCommand.Parse(args);
 
 // options handler
-var addlDirectories = parseResult.GetValue(addlDirectoriesOption);
-var addlExeExclusionWords = parseResult.GetValue(addlExeExclusionWordsOption);
+var addlDirectories = parseResult.GetValue(addlDirectoriesOption) ?? [];
+var addlExeExclusionWords = parseResult.GetValue(addlExeExclusionWordsOption) ?? [];
 var sunshineConfigLocation = parseResult.GetValue(sunshineConfigLocationOption);
 var forceUpdate = parseResult.GetValue(forceOption);
 var removeUninstalled = parseResult.GetValue(removeUninstalledOption);
 var ensureDesktop = parseResult.GetValue(ensureDesktopAppOption);
 var ensureSteamBigPicture = parseResult.GetValue(ensureSteamBigPictureOption);
 var nowait = parseResult.GetValue(nowaitAfterRunning);
+var notify = parseResult.GetValue(notifyOption);
+
+void Notify(string title, string message)
+{
+    if (notify)
+        Notifier.Send(title, message);
+}
 
 foreach (var dir in addlDirectories)
 {
     if (Directory.Exists(dir))
     {
-        gameDirs.Add(dir);
+        gameDirs.Add(PlatformPaths.NormalizeDir(dir));
+    }
+    else
+    {
+        Logger.Log($"Additional directory does not exist, skipping: {dir}", LogLevel.Warning);
     }
 }
 exeExclusionWords.AddRange(addlExeExclusionWords);
-var sunshineAppsJson = sunshineConfigLocation;
-var sunshineRootFolder = Path.GetDirectoryName(sunshineAppsJson);
+var sunshineAppsJson = Path.GetFullPath(string.IsNullOrWhiteSpace(sunshineConfigLocation) ? PlatformPaths.GetDefaultSunshineAppsJson() : sunshineConfigLocation);
+var sunshineRootFolder = Path.GetDirectoryName(sunshineAppsJson)!;
 
 if (!File.Exists(sunshineAppsJson))
 {
     Logger.Log($"Could not find Sunshine Apps config at specified path: {sunshineAppsJson}", LogLevel.Error);
+    Notify("Sunshine Game Finder failed", $"Could not find Sunshine apps config at {sunshineAppsJson}");
     return;
 }
-var sunshineAppInstance = JsonSerializer.Deserialize<SunshineConfig>(File.ReadAllText(sunshineAppsJson), SourceGenerationContext.Default.SunshineConfig);
+var sunshineAppInstance = JsonSerializer.Deserialize<SunshineConfig>(await File.ReadAllTextAsync(sunshineAppsJson), SourceGenerationContext.Default.SunshineConfig);
 
 sunshineAppInstance ??= new SunshineConfig() { Env = new Env() };
 sunshineAppInstance.apps ??= new List<SunshineApp>();
 sunshineAppInstance.Env ??= new Env();
+
+var steamScan = SteamLibrary.Scan();
+var installedSteamAppIds = steamScan.Games.Select(g => g.AppId).ToHashSet();
 
 var gamesAdded = 0;
 var gamesRemoved = 0;
@@ -162,15 +170,25 @@ if (removeUninstalled)
         var existingApp = sunshineAppInstance.apps[i];
         if (existingApp != null)
         {
-            var exeStillExists = existingApp.Cmd == null && existingApp.Detached == null ||
-                                 existingApp.Cmd != null && File.Exists(existingApp.Cmd) ||
-                                 existingApp.Cmd?.StartsWith("steam://") == true ||
+            bool exeStillExists;
+            var steamAppId = SteamLibrary.GetAppId(existingApp);
+            if (steamAppId != null)
+            {
+                // Only trust the Steam check if we actually found a Steam library on this machine
+                exeStillExists = steamScan.LibraryPaths.Count == 0 || installedSteamAppIds.Contains(steamAppId);
+            }
+            else
+            {
+                exeStillExists = existingApp.Cmd == null && existingApp.Detached == null ||
+                                 existingApp.Cmd != null && File.Exists(existingApp.Cmd.Trim('"')) ||
+                                 existingApp.Cmd?.Contains("://") == true ||
                                  existingApp.Detached != null && existingApp.Detached.Any(detachedCommand =>
                                  {
                                      return detachedCommand == null ||
                                       !detachedCommand.Contains("exe") ||
-                                      detachedCommand != null && detachedCommand.EndsWith("exe") && File.Exists(detachedCommand);
+                                      detachedCommand != null && detachedCommand.EndsWith("exe") && File.Exists(detachedCommand.Trim('"'));
                                  });
+            }
             if (!exeStillExists)
             {
                 Logger.Log($"{existingApp.Name} no longer has an exe, removing from apps config...",
@@ -182,22 +200,97 @@ if (removeUninstalled)
     }
 }
 
-if (sunshineAppInstance == null)
+var foldersScanned = new HashSet<string>(PlatformPaths.PathComparer);
+var gameDirsScanned = new HashSet<string>(PlatformPaths.PathComparer);
+var coversFolderPath = Path.Combine(sunshineRootFolder, "covers");
+
+async Task AddApp(SunshineApp newApp, string launchCommand)
 {
-    Logger.Log($"Sunshine app list is null", LogLevel.Error);
-    return;
+    var apps = sunshineAppInstance.apps!;
+    var existingApp = apps.FirstOrDefault(g => g.Name == newApp.Name || g.Cmd == launchCommand || g.Detached?.Contains(launchCommand) == true);
+    if (existingApp != null && !forceUpdate)
+    {
+        Logger.Log($"Found existing Sunshine app for {newApp.Name} already!: " + (existingApp.Cmd ?? existingApp.Detached?.FirstOrDefault() ?? existingApp.Name).Trim());
+        return;
+    }
+    if (existingApp != null)
+    {
+        apps.Remove(existingApp);
+    }
+
+    string? fullPathOfCoverImage = await ImageScraper.SaveIGDBImageToCoversFolder(newApp.Name, coversFolderPath);
+    if (!string.IsNullOrEmpty(fullPathOfCoverImage))
+    {
+        newApp.ImagePath = fullPathOfCoverImage;
+    }
+    else
+    {
+        Logger.Log("Failed to find cover image for " + newApp.Name, LogLevel.Warning);
+    }
+    gamesAdded++;
+    Logger.Log($"Adding new game to Sunshine apps: {newApp.Name} - {launchCommand}", LogLevel.Success);
+    apps.Add(newApp);
 }
 
-var foldersScanned = new HashSet<string>();
+async Task ScanGameDir(DirectoryInfo gameDir, string? displayName = null, bool isRockstar = false)
+{
+    if (!gameDirsScanned.Add(PlatformPaths.NormalizeDir(gameDir.FullName)))
+        return;
+
+    try
+    {
+        Logger.Log($"\tLooking in {gameDir.Name}...", false);
+        var isMacApp = OperatingSystem.IsMacOS() && gameDir.Extension.Equals(".app", StringComparison.OrdinalIgnoreCase);
+        var gameName = CleanGameName(displayName ?? (isMacApp ? Path.GetFileNameWithoutExtension(gameDir.Name) : gameDir.Name));
+        if (excludedFolderNames.Contains(gameDir.Name) || excludedFolderNames.Contains(gameName) || exclusionWords.Any(ew => gameName.Contains(ew)))
+        {
+            Logger.Log($"Skipping due to excluded word match", LogLevel.Trace);
+            return;
+        }
+
+        if (isMacApp)
+        {
+            var openCommand = $"open -a \"{gameDir.FullName}\"";
+            await AddApp(new SunshineApp() { Name = gameName, Detached = [openCommand], WorkingDir = "" }, openCommand);
+            return;
+        }
+
+        isRockstar |= gameDir.FullName.Contains("Rockstar Games", StringComparison.OrdinalIgnoreCase);
+        var exe = GameExecutableFinder.Find(gameDir, gameName, exeExclusionWords, isRockstar);
+        if (string.IsNullOrEmpty(exe))
+        {
+            Logger.Log($"EXE not be found", LogLevel.Warning);
+            return;
+        }
+
+        SunshineApp newApp;
+        if (Path.GetFileName(exe).Equals("gamelaunchhelper.exe", StringComparison.OrdinalIgnoreCase))
+        {
+            //xbox game pass game
+            newApp = new SunshineApp() { Name = gameName, Detached = [exe], WorkingDir = "" };
+        }
+        else if (OperatingSystem.IsWindows())
+        {
+            newApp = new SunshineApp() { Name = gameName, Cmd = exe, WorkingDir = "" };
+        }
+        else
+        {
+            // Sunshine splits commands on spaces on Linux/macOS
+            newApp = new SunshineApp() { Name = gameName, Cmd = exe.Contains(' ') ? $"\"{exe}\"" : exe, WorkingDir = gameDir.FullName };
+        }
+        await AddApp(newApp, newApp.Cmd ?? exe);
+    }
+    catch (Exception ex)
+    {
+        Logger.Log(ex.Message, LogLevel.Error);
+    }
+}
+
 async Task ScanFolder(string folder)
 {
-    if (folder == null)
+    if (!foldersScanned.Add(folder))
         return;
 
-    if (foldersScanned.Contains(folder))
-        return;
-
-    foldersScanned.Add(folder);
     Logger.Log($"Scanning for games in {folder}...");
     var di = new DirectoryInfo(folder);
     if (!di.Exists)
@@ -205,127 +298,68 @@ async Task ScanFolder(string folder)
         Logger.Log($"Directory for platform {di.Name} does not exist, skipping...", LogLevel.Warning);
         return;
     }
-    foreach (var gameDir in di.GetDirectories())
+    try
     {
+        foreach (var gameDir in di.GetDirectories())
+        {
+            await ScanGameDir(gameDir);
+        }
+    }
+    catch (Exception ex)
+    {
+        Logger.Log(ex.Message, LogLevel.Error);
+    }
+    Console.WriteLine(""); //blank line to separate platforms
+}
+
+// Steam: launch via steam://rungameid so Steam DRM / EasyAntiCheat start correctly
+if (steamScan.Games.Count > 0)
+{
+    Logger.Log($"Scanning {steamScan.Games.Count} installed Steam apps across {steamScan.LibraryPaths.Count} libraries...");
+    foreach (var game in steamScan.Games)
+    {
+        gameDirsScanned.Add(game.InstallDir);
+        var gameName = CleanGameName(game.Name);
+        Logger.Log($"\tSteam app {game.AppId} {gameName}...", false);
+        if (SteamLibrary.IsTool(game) || exclusionWords.Any(ew => gameName.Contains(ew)))
+        {
+            Logger.Log($"Skipping Steam tool/excluded app", LogLevel.Trace);
+            continue;
+        }
         try
         {
-            Logger.Log($"\tLooking in {gameDir.FullName.Replace(folder, "")}...", false);
-            var gameName = CleanGameName(gameDir.Name);
-            if (exclusionWords.Any(ew => gameName.Contains(ew)))
-            {
-                Logger.Log($"Skipping due to excluded word match", LogLevel.Trace);
-                continue;
-            }
-            var exe = Directory.GetFiles(gameDir.FullName, "*.exe", SearchOption.AllDirectories).FirstOrDefault(exefile =>
-            {
-                var exeName = new FileInfo(exefile).Name.ToLower();
-                return exeName == gameDir.Name.ToLower() || exeName == gameName.ToLower() || !exeExclusionWords.Any(ew => exeName.Contains(ew.ToLower()));
-            });
-            if (string.IsNullOrEmpty(exe))
-            {
-                Logger.Log($"EXE not be found", LogLevel.Warning);
-                continue;
-            }
-
-            var existingApp = sunshineAppInstance.apps?.FirstOrDefault(g => g.Cmd == exe || g.Name == gameName);
-            if (forceUpdate || existingApp == null)
-            {
-                if (forceUpdate && existingApp != null)
-                {
-                    sunshineAppInstance.apps.Remove(existingApp);
-                }
-                if (exe.Contains("gamelaunchhelper.exe"))
-                {
-                    //xbox game pass game
-                    existingApp = new SunshineApp()
-                    {
-                        Name = gameName,
-                        Detached = new List<string>()
-                        {
-                            exe
-                        },
-                        WorkingDir = ""
-                    };
-                }
-                else
-                {
-                    existingApp = new SunshineApp()
-                    {
-                        Name = gameName,
-                        Cmd = exe,
-                        WorkingDir = ""
-                    };
-                }
-                string coversFolderPath = Path.GetFullPath(sunshineRootFolder.Replace("\\", "/") + "/covers/");
-                string fullPathOfCoverImage = await ImageScraper.SaveIGDBImageToCoversFolder(gameName, coversFolderPath);
-                if (!string.IsNullOrEmpty(fullPathOfCoverImage))
-                {
-                    existingApp.ImagePath = fullPathOfCoverImage;
-                }
-                else
-                {
-                    Logger.Log("Failed to find cover image for " + gameName, LogLevel.Warning);
-                }
-                gamesAdded++;
-                Logger.Log($"Adding new game to Sunshine apps: {gameName} - {exe}", LogLevel.Success);
-                sunshineAppInstance.apps.Add(existingApp);
-            }
-            else
-            {
-                Logger.Log($"Found existing Sunshine app for {gameName} already!: " + (existingApp.Cmd ?? existingApp.Detached?.FirstOrDefault() ?? existingApp.Name).Trim());
-            }
+            var steamApp = SteamLibrary.CreateApp(gameName, game.AppId);
+            await AddApp(steamApp, steamApp.Detached![0]);
         }
         catch (Exception ex)
         {
             Logger.Log(ex.Message, LogLevel.Error);
         }
     }
-    Console.WriteLine(""); //blank line to separate platforms
+    Console.WriteLine("");
 }
 
-var logicalDrives = DriveInfo.GetDrives();
-var wildcatDriveLetter = new Regex(Regex.Escape(wildcatDrive));
-
-foreach (var drive in logicalDrives)
+if (OperatingSystem.IsWindows())
 {
-    var libraryFoldersPath = drive.Name + steamLibraryFolders;
-    var file = new FileInfo(libraryFoldersPath);
-    if (!file.Exists)
+    var rockstarGames = RockstarLibrary.GetInstalledGames();
+    if (rockstarGames.Count > 0)
     {
-        Logger.Log($"libraryfolders.vdf not found on {file.DirectoryName}, skipping...", LogLevel.Warning);
-        continue;
-    }
-    try
-    {
-        var libraries = VdfConvert.Deserialize(File.ReadAllText(libraryFoldersPath));
-        foreach (var library in libraries.Value)
+        Logger.Log("Scanning Rockstar Games Launcher titles...");
+        foreach (var (name, installFolder) in rockstarGames)
         {
-            if (library is not VProperty libProp)
-                continue;
-            try
-            {
-                Logger.Log("Found VDF library: " + libProp.Value.ToList().Select(v => v.Value<string>()));
-            }
-            catch (Exception ex)
-            {
-                Logger.Log("Failed to parse VDF library value: '" + ex.Message + "' at " + libraryFoldersPath, LogLevel.Warning);
-            }
-
-            gameDirs.Add($@"{libProp.Value.Value<string>("path")}\steamapps\common");
+            await ScanGameDir(new DirectoryInfo(installFolder), name, isRockstar: true);
         }
-    }
-    catch (Exception vdfException)
-    {
-        Logger.Log("Failed to parse libraryfolders.vdf: '" + vdfException.Message + "' at " + libraryFoldersPath, LogLevel.Warning);
+        Console.WriteLine("");
     }
 }
 
+var logicalDrives = OperatingSystem.IsWindows() ? DriveInfo.GetDrives().Where(d => d.IsReady).ToArray() : [];
 foreach (var platformDir in gameDirs)
 {
-    if (platformDir.StartsWith(wildcatDrive))
+    if (platformDir.StartsWith(wildcardDrive))
     {
         foreach (var drive in logicalDrives)
-            await ScanFolder(wildcatDriveLetter.Replace(platformDir, drive.Name, 1));
+            await ScanFolder(drive.Name + platformDir[wildcardDrive.Length..]);
     }
     else
     {
@@ -348,14 +382,22 @@ if (gamesAdded > 0 || gamesRemoved > 0)
     if (FileWriter.UpdateConfig(sunshineAppsJson, sunshineAppInstance))
     {
         Logger.Log($"Apps config is updated! {gamesAdded} apps were added. {gamesRemoved} apps were removed. Check Sunshine to ensure all games were added.", LogLevel.Success);
+        Notify("Sunshine Game Finder", $"{gamesAdded} games added, {gamesRemoved} removed.");
+    }
+    else
+    {
+        Notify("Sunshine Game Finder failed", $"Could not update {sunshineAppsJson}. See the log for details.");
     }
 }
 else
 {
     Logger.Log("No new games were found to be added to Sunshine");
+    Notify("Sunshine Game Finder", "No new games were found.");
 }
 
-if (!nowait)
+// Never block on input when there's no interactive console (scheduled task, cron, systemd timer)
+var interactive = !nowait && !Console.IsInputRedirected;
+if (interactive)
 {
     // Prompt the user to optionally restart the Sunshine service
     Console.Write("\nWould you like to restart the Sunshine service now? (Y/N): ");
@@ -363,25 +405,33 @@ if (!nowait)
     if (!string.IsNullOrEmpty(restartResponse) && restartResponse.Trim().Equals("Y", StringComparison.OrdinalIgnoreCase))
     {
         Logger.Log("Attempting to restart Sunshine service...", LogLevel.Trace);
-        await RestartSunshineServiceAsync();
+        RestartSunshineService();
     }
-}
 
-if (!nowait)
-{
     Logger.Log("\nPress any key to exit...");
     Console.ReadKey();
 }
 
 string CleanGameName(string name)
 {
-    string[] toReplace = new string[] { "Win10", "Windows 10", "Win11", "Windows 11" };
+    string[] toReplace = new string[] { "Win10", "Windows 10", "Win11", "Windows 11", "™", "®", "©" };
     foreach (string toRemove in toReplace)
     {
         name = name.Replace(toRemove, "");
     }
 
     return name.Trim();
+}
+
+static string QuoteArgument(string arg)
+{
+    if (arg.Length > 0 && !arg.Any(c => char.IsWhiteSpace(c) || c == '"'))
+        return arg;
+    var escaped = arg.Replace("\"", "\\\"");
+    // A trailing backslash would otherwise escape the closing quote
+    if (escaped.EndsWith('\\'))
+        escaped += "\\";
+    return $"\"{escaped}\"";
 }
 
 static bool IsRunAsAdmin()
@@ -406,57 +456,29 @@ static bool IsRunAsAdmin()
     }
 }
 
-static async Task RestartSunshineServiceAsync()
+static void RestartSunshineService()
 {
     try
     {
         if (OperatingSystem.IsWindows())
         {
-            var psi = new ProcessStartInfo("powershell", "-NoProfile -NonInteractive -Command \"Restart-Service -Name 'SunshineService' -Force\"")
-            {
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true
-            };
-            using var proc = Process.Start(psi);
-            proc.WaitForExit();
-            var outText = proc.StandardOutput.ReadToEnd();
-            var errText = proc.StandardError.ReadToEnd();
-            if (proc.ExitCode == 0)
-            {
+            if (ProcessRunner.Run("powershell", ["-NoProfile", "-NonInteractive", "-Command", "Restart-Service -Name 'SunshineService' -Force"]))
                 Logger.Log("SunshineService restarted successfully.", LogLevel.Success);
-            }
             else
-            {
-                Logger.Log($"Failed to restart SunshineService. ExitCode={proc.ExitCode}. {errText}", LogLevel.Warning);
-            }
+                Logger.Log("Failed to restart SunshineService.", LogLevel.Warning);
         }
-        else if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
+        else if (OperatingSystem.IsLinux())
         {
-            var psi = new ProcessStartInfo("systemctl", "restart sunshine")
-            {
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true
-            };
-            using var proc = Process.Start(psi);
-            proc.WaitForExit();
-            var outText = proc.StandardOutput.ReadToEnd();
-            var errText = proc.StandardError.ReadToEnd();
-            if (proc.ExitCode == 0)
-            {
-                Logger.Log("sunshine service restarted successfully.", LogLevel.Success);
-            }
+            // Sunshine runs as a systemd *user* service; the unit name differs between newer and older packages
+            if (ProcessRunner.Run("systemctl", ["--user", "restart", "app-dev.lizardbyte.app.Sunshine"]) ||
+                ProcessRunner.Run("systemctl", ["--user", "restart", "sunshine"]))
+                Logger.Log("Sunshine service restarted successfully.", LogLevel.Success);
             else
-            {
-                Logger.Log($"Failed to restart sunshine service. ExitCode={proc.ExitCode}. {errText}", LogLevel.Warning);
-            }
+                Logger.Log("Failed to restart Sunshine. If you ran this with sudo, run it as your normal user or restart Sunshine manually.", LogLevel.Warning);
         }
         else
         {
-            Logger.Log("Unsupported OS for restarting service", LogLevel.Warning);
+            Logger.Log("Automatic restart isn't supported on this OS, please restart Sunshine manually.", LogLevel.Warning);
         }
     }
     catch (Exception ex)

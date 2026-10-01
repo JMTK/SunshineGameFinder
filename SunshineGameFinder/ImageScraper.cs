@@ -1,61 +1,43 @@
 ﻿using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 
 namespace SunshineGameFinder
 {
-    internal class ImageScraper
+    internal class BucketGame
+    {
+        [JsonPropertyName("name")]
+        public string? Name { get; set; }
+    }
+
+    internal class IgdbCover
+    {
+        [JsonPropertyName("url")]
+        public string? Url { get; set; }
+    }
+
+    internal class IgdbGame
+    {
+        [JsonPropertyName("cover")]
+        public IgdbCover? Cover { get; set; }
+    }
+
+    // Source-generated so it keeps working in trimmed release builds
+    [JsonSerializable(typeof(Dictionary<int, BucketGame>))]
+    [JsonSerializable(typeof(IgdbGame))]
+    internal partial class ImageScraperJsonContext : JsonSerializerContext
+    {
+    }
+
+    internal partial class ImageScraper
     {
         static string bucketTemplate = "https://raw.githubusercontent.com/LizardByte/GameDB/gh-pages/buckets/@FIRSTTWOLETTERS.json";
         static string gameTemplate = "https://raw.githubusercontent.com/LizardByte/GameDB/gh-pages/games/@ID.json";
         static readonly HttpClient HttpClient = new HttpClient();
-        private class GamesForBucket
-        {
-            public string name { get; set; }
-        }
+        static readonly byte[] PngSignature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
 
-        public class Artwork
-        {
-            public int id { get; set; }
-            public string url { get; set; }
-        }
-
-        public class Cover
-        {
-            public int id { get; set; }
-            public string url { get; set; }
-        }
-
-        public class Genre
-        {
-            public int id { get; set; }
-            public string name { get; set; }
-        }
-
-        public class Game
-        {
-            public int id { get; set; }
-            public List<Artwork> artworks { get; set; }
-            public Cover cover { get; set; }
-            public List<Genre> genres { get; set; }
-            public string name { get; set; }
-            public List<Screenshot> screenshots { get; set; }
-            public string slug { get; set; }
-            public string summary { get; set; }
-            public List<Theme> themes { get; set; }
-            public string url { get; set; }
-        }
-
-        public class Screenshot
-        {
-            public int id { get; set; }
-            public string url { get; set; }
-        }
-
-        public class Theme
-        {
-            public int id { get; set; }
-            public string name { get; set; }
-        }
-
+        [GeneratedRegex(@"\.(jpe?g|webp)$", RegexOptions.IgnoreCase)]
+        private static partial Regex ImageExtensionRegex();
 
 
         /// <summary>
@@ -127,32 +109,37 @@ namespace SunshineGameFinder
         {
             try
             {
-                var bucketUrl = bucketTemplate.Replace("@FIRSTTWOLETTERS", string.Join("", gameName.Take(2)).ToLower());
-                var rawJson = await (await HttpClient.GetAsync(bucketUrl)).Content.ReadAsStringAsync();
-                var dict = JsonSerializer.Deserialize<Dictionary<int, GamesForBucket>>(rawJson);
+                var bucketUrl = bucketTemplate.Replace("@FIRSTTWOLETTERS", string.Join("", gameName.Take(2)).ToLowerInvariant());
+                using var response = await HttpClient.GetAsync(bucketUrl);
+                if (!response.IsSuccessStatusCode)
+                {
+                    Logger.Log($"\t\tNo games bucket found for: {gameName}", LogLevel.Warning);
+                    return -1;
+                }
+                var rawJson = await response.Content.ReadAsStringAsync();
+                var dict = JsonSerializer.Deserialize(rawJson, ImageScraperJsonContext.Default.DictionaryInt32BucketGame);
                 
                 if (dict == null || dict.Count == 0)
                 {
                     Logger.Log($"\t\tNo games found in bucket for: {gameName}", LogLevel.Warning);
                     return -1;
                 }
-                
-                KeyValuePair<int, GamesForBucket>? FindGameFuzzy(double percentage)
-                {
-                    var match = dict.FirstOrDefault(kvp => CalculateSimilarity(kvp.Value.name.ToLower(), gameName.ToLower()) > (percentage / 100));
-                    return match;
-                }
 
-                // Attempt to find a close match at 90% similarity first, then 75% if that fails
-                var game = FindGameFuzzy(90) ?? FindGameFuzzy(75);
+                // Pick the best match rather than the first one over the threshold
+                var target = gameName.ToLowerInvariant();
+                var best = dict
+                    .Where(kvp => !string.IsNullOrEmpty(kvp.Value?.Name))
+                    .Select(kvp => (Id: kvp.Key, Score: CalculateSimilarity(kvp.Value.Name!.ToLowerInvariant(), target)))
+                    .OrderByDescending(m => m.Score)
+                    .FirstOrDefault();
                 
-                if (game == null)
+                if (best.Score < 0.75)
                 {
                     Logger.Log($"\t\tCould not find game ID for: {gameName}", LogLevel.Warning);
                     return -1;
                 }
                 
-                return game.Value.Key;
+                return best.Id;
             }
             catch (Exception ex)
             {
@@ -161,7 +148,7 @@ namespace SunshineGameFinder
             }
         }
 
-        public static async Task<string> SaveIGDBImageToCoversFolder(string gameName, string coversFolderPath)
+        public static async Task<string?> SaveIGDBImageToCoversFolder(string gameName, string coversFolderPath)
         {
             try
             {
@@ -176,10 +163,16 @@ namespace SunshineGameFinder
                 {
                     return null;
                 }
+
+                string fullpath = Path.Combine(coversFolderPath, gameId.ToString() + ".png");
+                if (File.Exists(fullpath) && IsPng(await File.ReadAllBytesAsync(fullpath)))
+                {
+                    return fullpath;
+                }
                 
                 var gameUrl = gameTemplate.Replace("@ID", gameId.ToString());
-                var rawJson = await (await HttpClient.GetAsync(gameUrl)).Content.ReadAsStringAsync();
-                var game = JsonSerializer.Deserialize<Game>(rawJson);
+                var rawJson = await HttpClient.GetStringAsync(gameUrl);
+                var game = JsonSerializer.Deserialize(rawJson, ImageScraperJsonContext.Default.IgdbGame);
                 
                 if (game == null)
                 {
@@ -187,22 +180,24 @@ namespace SunshineGameFinder
                     return null;
                 }
                 
-                var coverUrl = game.cover?.url;
+                var coverUrl = game.Cover?.Url;
                 if (string.IsNullOrEmpty(coverUrl))
                 {
                     Logger.Log($"\t\tNo cover URL found for game: {gameName} (ID: {gameId})", LogLevel.Warning);
                     return null;
                 }
-                
-                var imageUrl = "https:" + coverUrl.Replace("thumb", "cover_big");
-                var stream = await (await HttpClient.GetAsync(imageUrl)).Content.ReadAsStreamAsync();
 
-                string fullpath = Path.Combine(coversFolderPath, gameId.ToString() + ".png");
-                
-                using FileStream fs = new(fullpath, FileMode.OpenOrCreate);
-                stream.Position = 0;
-                await stream.CopyToAsync(fs);
-                
+                // IGDB serves JPEG by default but Sunshine only accepts real PNG files, so request the .png variant
+                var imageUrl = (coverUrl.StartsWith("//") ? "https:" + coverUrl : coverUrl).Replace("t_thumb", "t_cover_big");
+                imageUrl = ImageExtensionRegex().Replace(imageUrl, ".png");
+                var bytes = await HttpClient.GetByteArrayAsync(imageUrl);
+                if (!IsPng(bytes))
+                {
+                    Logger.Log($"\t\tDownloaded cover for {gameName} is not a valid PNG: {imageUrl}", LogLevel.Warning);
+                    return null;
+                }
+
+                await File.WriteAllBytesAsync(fullpath, bytes);
                 return fullpath;
             }
             catch (Exception ex)
@@ -211,5 +206,7 @@ namespace SunshineGameFinder
                 return null;
             }
         }
+
+        private static bool IsPng(byte[] bytes) => bytes.AsSpan().StartsWith(PngSignature);
     }
 }

@@ -71,20 +71,15 @@ namespace SunshineGameFinder
         {
             if (string.IsNullOrEmpty(path)) return string.Empty;
 
-            // First remove any existing quotes at the start/end
+            // Only Windows uses backslashes; Linux/macOS paths need forward slashes and keep quotes (Sunshine splits commands on spaces there)
+            if (!OperatingSystem.IsWindows()) return path;
+
             path = path.Trim('"');
 
-            // Do not normalize steam:// protocol
-            if (!path.StartsWith("steam://", StringComparison.OrdinalIgnoreCase))
+            // Do not normalize URIs such as steam://
+            if (!path.Contains("://"))
             {
-                // Normalize slashes to backslashes
                 path = path.Replace("/", "\\");
-            }
-
-            // If path has spaces we need to wrap it in quotes
-            if (path.Contains(" "))
-            {
-                return $"{path}";
             }
 
             return path;
@@ -94,20 +89,18 @@ namespace SunshineGameFinder
         {
             if (string.IsNullOrEmpty(path)) return string.Empty;
 
-            // Split into separate paths
-            var paths = path.Split(';', StringSplitOptions.RemoveEmptyEntries);
+            // Split into separate paths (';' on Windows, ':' on Linux/macOS)
+            var paths = path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries);
             
             // Process each path
             var formattedPaths = paths.Select(p => 
             {
                 // Remove spaces at the beginning and end, and any quotes
                 var trimmed = p.Trim().Trim('"');
-                // Normalize slashes (optional, but preferred for Windows)
-                return trimmed.Replace("/", "\\").TrimEnd('\\');
+                return OperatingSystem.IsWindows() ? trimmed.Replace("/", "\\").TrimEnd('\\') : trimmed;
             });
 
-            // Join back with semicolon
-            return string.Join(";", formattedPaths);
+            return string.Join(Path.PathSeparator, formattedPaths);
         }
     }
 
@@ -131,7 +124,7 @@ namespace SunshineGameFinder
         [JsonPropertyName("cmd")]
         public string? Cmd
         {
-            get => _cmd?.Trim('"');
+            get => _cmd;
             set => _cmd = value != null ? PathFormatter.FormatPath(value) : null;
         }
 
