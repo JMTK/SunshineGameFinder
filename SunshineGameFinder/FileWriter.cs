@@ -10,6 +10,14 @@ namespace SunshineGameFinder
         private const string backupFileExtension = "bak";
         private const int backupsToKeep = 5;
 
+        // Source-generated so serialization still works in trimmed release builds
+        private static readonly SourceGenerationContext WriterContext = new(new JsonSerializerOptions
+        {
+            WriteIndented = true,
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+            Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+        });
+
         /// <summary>
         /// Creates a backup of the original file and writes the new configuration in it's place.
         /// </summary>
@@ -25,14 +33,7 @@ namespace SunshineGameFinder
                 string backUpFilePath = Path.Combine(folderPath, $"{Path.GetFileNameWithoutExtension(filePath)}_{DateTime.Now.ToString("MMddyyyy_HHmmss")}.{backupFileExtension}");
                 File.Move(filePath, backUpFilePath);
 
-                var options = new JsonSerializerOptions
-                {
-                    WriteIndented = true,
-                    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-                    Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-                };
-
-                string serializedJson = JsonSerializer.Serialize(config, options);
+                string serializedJson = JsonSerializer.Serialize(config, WriterContext.SunshineConfig);
                 File.WriteAllText(filePath, serializedJson);
             }
             catch (Exception e)

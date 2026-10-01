@@ -16,6 +16,8 @@
 		<FileVersion>1.13.0</FileVersion>
 		<JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
 		<AnalysisLevel>latest-all</AnalysisLevel>
+		<!-- Avoids a hard libicu dependency on minimal Linux installs (e.g. Arch) -->
+		<InvariantGlobalization>true</InvariantGlobalization>
 	</PropertyGroup>
 
 	<ItemGroup>

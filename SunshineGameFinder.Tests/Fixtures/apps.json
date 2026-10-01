@@ -1,0 +1,30 @@
+{
+  "env": {
+    "PATH": "C:\\Tools;C:\\Games"
+  },
+  "apps": [
+    {
+      "name": "Existing Game",
+      "image-path": "C:\\Sunshine\\covers\\existing.png",
+      "cmd": "C:\\Games\\Existing Game\\game.exe",
+      "working-dir": "C:\\Games\\Existing Game",
+      "exclude-global-prep-cmd": false,
+      "elevated": true,
+      "exit-timeout": 5,
+      "prep-cmd": [
+        {
+          "do": "prepare.exe",
+          "undo": "cleanup.exe",
+          "elevated": false
+        }
+      ]
+    },
+    {
+      "name": "Steam Game",
+      "detached": [
+        "steam://rungameid/12345"
+      ],
+      "working-dir": ""
+    }
+  ]
+}

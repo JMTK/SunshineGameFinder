@@ -1,0 +1,168 @@
+name: Release
+
+# Every push to main publishes a new release. Version bump defaults to patch;
+# include "#minor" or "#major" in the commit message (or use the manual trigger) to bump further.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'SunshineGameFinder/**'
+      - '.github/workflows/release.yml'
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Version component to bump
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  DOTNET_VERSION: '10.0.x'
+  PROJECT: SunshineGameFinder/SunshineGameFinder.csproj
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.next.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute next version
+        id: next
+        env:
+          BUMP_INPUT: ${{ github.event.inputs.bump }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          latest=$(git tag --list | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+$' | sed 's/^v//' | sort -V | tail -n 1)
+          latest=${latest:-0.0.0}
+          IFS=. read -r major minor patch <<< "$latest"
+
+          bump="${BUMP_INPUT:-patch}"
+          if [[ -z "$BUMP_INPUT" ]]; then
+            if grep -qiE '#major|BREAKING CHANGE' <<< "$COMMIT_MESSAGE"; then bump=major
+            elif grep -qiE '#minor' <<< "$COMMIT_MESSAGE"; then bump=minor
+            fi
+          fi
+
+          case "$bump" in
+            major) major=$((major + 1)); minor=0; patch=0 ;;
+            minor) minor=$((minor + 1)); patch=0 ;;
+            *)     patch=$((patch + 1)) ;;
+          esac
+
+          version="$major.$minor.$patch"
+          echo "Previous: $latest | bump: $bump | next: $version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { rid: win-x64,     os: ubuntu-latest }
+          - { rid: win-arm64,   os: ubuntu-latest }
+          - { rid: linux-x64,   os: ubuntu-latest }
+          - { rid: linux-arm64, os: ubuntu-latest }
+          # macOS binaries must be built on macOS so the apphost gets code-signed (unsigned arm64 binaries are killed)
+          - { rid: osx-x64,     os: macos-latest }
+          - { rid: osx-arm64,   os: macos-latest }
+    runs-on: ${{ matrix.os }}
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Publish
+        run: >
+          dotnet publish "$PROJECT" -c Release -r ${{ matrix.rid }} --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:DebugType=none
+          -p:Version=$VERSION -p:AssemblyVersion=$VERSION -p:FileVersion=$VERSION
+          -o publish/${{ matrix.rid }}
+
+      - name: Package
+        shell: bash
+        run: |
+          name="SunshineGameFinder-$VERSION-${{ matrix.rid }}"
+          cd "publish/${{ matrix.rid }}"
+          if [[ "${{ matrix.rid }}" == win-* ]]; then
+            zip -r "../../$name.zip" .
+          else
+            # tar keeps the executable bit; zip extraction on Linux/macOS loses it
+            chmod +x SunshineGameFinder
+            tar -czf "../../$name.tar.gz" .
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.rid }}
+          path: |
+            SunshineGameFinder-*.zip
+            SunshineGameFinder-*.tar.gz
+          if-no-files-found: error
+
+  release:
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum * > SHA256SUMS.txt
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.version.outputs.version }}
+          name: ${{ needs.version.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
+          files: dist/*
+
+  github-packages:
+    needs: [version, release]
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      # Published as a .NET tool: dotnet tool install -g SunshineGameFinder --add-source https://nuget.pkg.github.com/<owner>/index.json
+      - name: Pack .NET tool
+        run: >
+          dotnet pack "$PROJECT" -c Release -o nupkg
+          -p:PackAsTool=true
+          -p:ToolCommandName=sunshine-game-finder
+          -p:PublishTrimmed=false
+          -p:Version=$VERSION -p:AssemblyVersion=$VERSION -p:FileVersion=$VERSION
+
+      - name: Push to GitHub Packages
+        run: >
+          dotnet nuget push "nupkg/*.nupkg"
+          --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
+          --api-key "${{ secrets.GITHUB_TOKEN }}"
+          --skip-duplicate
