@@ -1,23 +1,8 @@
-using System.Text;
-
 namespace SunshineGameFinder
 {
     internal static class Notifier
     {
         private const string AppName = "Sunshine Game Finder";
-
-        // Requires Windows PowerShell 5.1 (pwsh lacks WinRT projections). Text arrives via env vars so it can't inject script.
-        private const string WindowsToastScript = """
-            $ErrorActionPreference = 'Stop'
-            [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
-            [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null
-            $title = [System.Security.SecurityElement]::Escape($env:SGF_NOTIFY_TITLE)
-            $message = [System.Security.SecurityElement]::Escape($env:SGF_NOTIFY_MESSAGE)
-            $xml = New-Object Windows.Data.Xml.Dom.XmlDocument
-            $xml.LoadXml("<toast><visual><binding template='ToastGeneric'><text>$title</text><text>$message</text></binding></visual></toast>")
-            $appId = '{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\WindowsPowerShell\v1.0\powershell.exe'
-            [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($appId).Show([Windows.UI.Notifications.ToastNotification]::new($xml))
-            """;
 
         public static void Send(string title, string message)
         {
@@ -26,10 +11,13 @@ namespace SunshineGameFinder
                 bool sent;
                 if (OperatingSystem.IsWindows())
                 {
-                    var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(WindowsToastScript));
-                    sent = ProcessRunner.Run("powershell.exe",
-                        ["-NoProfile", "-NonInteractive", "-EncodedCommand", encoded],
-                        new Dictionary<string, string> { ["SGF_NOTIFY_TITLE"] = title, ["SGF_NOTIFY_MESSAGE"] = message });
+                    var script = $"[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null; " +
+                                 $"[Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null; " +
+                                 $"$xml = New-Object Windows.Data.Xml.Dom.XmlDocument; " +
+                                 $"$xml.LoadXml('<toast><visual><binding template=\"ToastGeneric\"><text>{EscapeXml(title)}</text><text>{EscapeXml(message)}</text></binding></visual></toast>'); " +
+                                 $"[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('{{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}}\\WindowsPowerShell\\v1.0\\powershell.exe').Show([Windows.UI.Notifications.ToastNotification]::new($xml))";
+
+                    sent = ProcessRunner.Run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script]);
                 }
                 else if (OperatingSystem.IsMacOS())
                 {
@@ -49,5 +37,8 @@ namespace SunshineGameFinder
                 Logger.Log($"Failed to send system notification: {ex.Message}", LogLevel.Warning);
             }
         }
+
+        private static string EscapeXml(string text) =>
+            System.Security.SecurityElement.Escape(text) ?? string.Empty;
     }
 }
