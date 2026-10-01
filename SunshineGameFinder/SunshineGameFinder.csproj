@@ -18,6 +18,8 @@
 		<AnalysisLevel>latest-all</AnalysisLevel>
 		<!-- Avoids a hard libicu dependency on minimal Linux installs (e.g. Arch) -->
 		<InvariantGlobalization>true</InvariantGlobalization>
+		<EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+		<DefineConstants Condition="$([MSBuild]::IsOSPlatform('Windows')) or '$(RuntimeIdentifier)' == 'win-x64' or '$(RuntimeIdentifier)' == 'win-arm64'">$(DefineConstants);WINDOWS_BUILD</DefineConstants>
 	</PropertyGroup>
 
 	<ItemGroup>
