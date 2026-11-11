@@ -1,8 +1,11 @@
 ## Sunshine Game Finder
+[![Release](https://img.shields.io/github/v/release/JMTK/SunshineGameFinder)](https://github.com/JMTK/SunshineGameFinder/releases/latest)
+[![VirusTotal](https://img.shields.io/badge/VirusTotal-Scan%20Reports-blue?logo=virustotal)](https://github.com/JMTK/SunshineGameFinder/releases/latest#virustotal-analysis)
+
 Searches your computer for various common game install paths for the [Sunshine](https://github.com/LizardByte/Sunshine) application. After running it, all games that did not already exist will be added to the `apps.json`, meaning your [Moonlight client](https://github.com/moonlight-stream/moonlight-qt) should see them next time it is started.
 
 ## Running the program from release
-1. Download the [latest release](https://github.com/JMTK/SunshineGameFinder/releases) for your platform (`win-x64`, `win-arm64`, `linux-x64`, `linux-arm64`, `osx-x64`, `osx-arm64`).
+1. Download the [latest release](https://github.com/JMTK/SunshineGameFinder/releases) for your platform (`win-x64`, `win-arm64`, `linux-x64`, `linux-arm64`, `osx-x64`, `osx-arm64`). Every release asset is scanned via VirusTotal, and scan links and detection stats are appended to the [release notes](https://github.com/JMTK/SunshineGameFinder/releases/latest#virustotal-analysis).
 2. **Windows:** the program elevates itself (UAC) because Sunshine's config lives in `Program Files`.
 3. **Linux/macOS:** extract with `tar -xzf` and run `./SunshineGameFinder` as your normal user (not `sudo`) - Sunshine's config is in `~/.config/sunshine/apps.json`.
 

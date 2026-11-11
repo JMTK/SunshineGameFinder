@@ -1,4 +1,7 @@
-using System.Text;
+#if WINDOWS_BUILD
+using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
+#endif
 
 namespace SunshineGameFinder
 {
@@ -6,37 +9,23 @@ namespace SunshineGameFinder
     {
         private const string AppName = "Sunshine Game Finder";
 
-        // Requires Windows PowerShell 5.1 (pwsh lacks WinRT projections). Text arrives via env vars so it can't inject script.
-        private const string WindowsToastScript = """
-            $ErrorActionPreference = 'Stop'
-            [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
-            [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null
-            $title = [System.Security.SecurityElement]::Escape($env:SGF_NOTIFY_TITLE)
-            $message = [System.Security.SecurityElement]::Escape($env:SGF_NOTIFY_MESSAGE)
-            $xml = New-Object Windows.Data.Xml.Dom.XmlDocument
-            $xml.LoadXml("<toast><visual><binding template='ToastGeneric'><text>$title</text><text>$message</text></binding></visual></toast>")
-            $appId = '{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\WindowsPowerShell\v1.0\powershell.exe'
-            [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($appId).Show([Windows.UI.Notifications.ToastNotification]::new($xml))
-            """;
-
         public static void Send(string title, string message)
         {
             try
             {
-                bool sent;
+                bool sent = false;
+#if WINDOWS_BUILD
                 if (OperatingSystem.IsWindows())
                 {
-                    var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(WindowsToastScript));
-                    sent = ProcessRunner.Run("powershell.exe",
-                        ["-NoProfile", "-NonInteractive", "-EncodedCommand", encoded],
-                        new Dictionary<string, string> { ["SGF_NOTIFY_TITLE"] = title, ["SGF_NOTIFY_MESSAGE"] = message });
+                    sent = ShowWindowsNotification(title, message);
                 }
-                else if (OperatingSystem.IsMacOS())
+#endif
+                if (OperatingSystem.IsMacOS())
                 {
                     sent = ProcessRunner.Run("osascript",
                         ["-e", "on run argv", "-e", "display notification (item 2 of argv) with title (item 1 of argv)", "-e", "end run", title, message]);
                 }
-                else
+                else if (OperatingSystem.IsLinux())
                 {
                     sent = ProcessRunner.Run("notify-send", ["-a", AppName, title, message]);
                 }
@@ -49,5 +38,64 @@ namespace SunshineGameFinder
                 Logger.Log($"Failed to send system notification: {ex.Message}", LogLevel.Warning);
             }
         }
+
+#if WINDOWS_BUILD
+        [SupportedOSPlatform("windows")]
+        private static bool ShowWindowsNotification(string title, string message)
+        {
+            try
+            {
+                var nid = new NOTIFYICONDATA
+                {
+                    cbSize = Marshal.SizeOf<NOTIFYICONDATA>(),
+                    hWnd = IntPtr.Zero,
+                    uID = 1001,
+                    uFlags = 0x00000002 | 0x00000010, // NIF_ICON | NIF_INFO
+                    hIcon = LoadIcon(IntPtr.Zero, (IntPtr)32516), // IDI_INFORMATION
+                    szInfoTitle = title.Length > 63 ? title[..63] : title,
+                    szInfo = message.Length > 255 ? message[..255] : message,
+                    dwInfoFlags = 0x00000001 // NIIF_INFO
+                };
+
+                Shell_NotifyIcon(0, ref nid); // NIM_ADD
+                Thread.Sleep(1000);
+                Shell_NotifyIcon(2, ref nid); // NIM_DELETE
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        private struct NOTIFYICONDATA
+        {
+            public int cbSize;
+            public IntPtr hWnd;
+            public int uID;
+            public int uFlags;
+            public int uCallbackMessage;
+            public IntPtr hIcon;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+            public string szTip;
+            public int dwState;
+            public int dwStateMask;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)]
+            public string szInfo;
+            public int uTimeoutOrVersion;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 64)]
+            public string szInfoTitle;
+            public int dwInfoFlags;
+            public Guid guidItem;
+            public IntPtr hBalloonIcon;
+        }
+
+        [DllImport("shell32.dll", CharSet = CharSet.Unicode, EntryPoint = "Shell_NotifyIconW")]
+        private static extern bool Shell_NotifyIcon(int dwMessage, ref NOTIFYICONDATA lpData);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "LoadIconW")]
+        private static extern IntPtr LoadIcon(IntPtr hInstance, IntPtr lpIconName);
+#endif
     }
 }

@@ -139,6 +139,18 @@ jobs:
           generate_release_notes: true
           files: dist/*
 
+      - name: VirusTotal Scan
+        if: env.VIRUSTOTAL_API_KEY != ''
+        uses: crazy-max/ghaction-virustotal@v4
+        env:
+          VIRUSTOTAL_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
+        with:
+          vt_api_key: ${{ secrets.VIRUSTOTAL_API_KEY }}
+          update_release_body: true
+          files: |
+            dist/SunshineGameFinder-*.zip
+            dist/SunshineGameFinder-*.tar.gz
+
   github-packages:
     needs: [version, release]
     runs-on: ubuntu-latest
